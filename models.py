@@ -1,8 +1,9 @@
 """Definición de los campos de cada tabla. La usan tanto la base de datos como la UI.
 
 `key` coincide con el nombre de la columna en SQLite.
-`kind`: text | choice (texto con sugerencias de lo ya cargado) | money | int | bool | select | datetime | multi | list
-(list = lista cerrada de textos fijos (`options`);
+`kind`: text | choice (texto con sugerencias de lo ya cargado) | email | money | int | bool | select | datetime | multi | list
+(email = texto en minúsculas, con formato de dirección de mail;
+ list = lista cerrada de textos fijos (`options`);
  multi = varias opciones de la tabla `ref`, en una tabla intermedia (no es columna);
  calc = columna calculada, solo se muestra en la tabla (no es columna ni entra en formularios ni CSV);
  date = fecha sin hora "AAAA-MM-DD" (puede quedar vacía), en el formulario dd/mm/aaaa;
@@ -195,11 +196,13 @@ SUCURSALES = (
     Field("celular", "Celular", width=110),
 )
 
-EMPLEADOS = (
-    Field("nombre", "Nombre", required=True, width=200, stretch=True),
-    Field("rol", "Rol", kind="choice", width=130),
-    Field("celular", "Celular", width=120),
-    Field("sucursales", "Sucursales", kind="multi", ref="sucursales", width=240),
+EMPLEADOS = (   # el orden es el de las columnas de la tabla y del formulario
+    Field("nombre", "Nombre", required=True, width=150),
+    Field("rol", "Cargo", kind="choice", width=130),
+    Field("sucursales", "Sucursales", kind="multi", ref="sucursales", width=240, stretch=True),
+    Field("celular", "Teléfono", width=120),
+    Field("email", "Mail", kind="email", width=210),
+    Field("fecha_nacimiento", "Fecha de nacimiento", kind="date", width=140),
 )
 
 CUENTAS = (

@@ -25,7 +25,7 @@ class Empleados(TableScreen):
     noun, noun_plural = "empleado", "empleados"
     form_new, form_edit = "Nuevo empleado", "Editar empleado"
     default_sort = "nombre"
-    left_keys = ("nombre",)
+    left_keys = ("nombre", "email")
 
     def _choices(self):
         choices = super()._choices()

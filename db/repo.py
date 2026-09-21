@@ -17,7 +17,7 @@ class Repo:
         self.order = order   # ORDER BY del listado
         self.fields = fields
         self.keys = [f.key for f in fields if f.kind not in ("multi", "pagos", "calc")]   # columnas de la tabla
-        self.text_keys = [f.key for f in fields if f.kind in ("text", "choice", "list")]
+        self.text_keys = [f.key for f in fields if f.kind in ("text", "choice", "list", "email")]
         assert filter_key in self.keys
         self.filter_key = filter_key
 

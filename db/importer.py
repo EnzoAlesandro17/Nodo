@@ -15,10 +15,11 @@ import difflib
 import io
 import re
 import unicodedata
+from datetime import datetime
 
 from db import refs
 from db.repo import AMBIGUO
-from ui.formatting import fmt_money, money_to_input, parse_int, parse_money
+from ui.formatting import fmt_date, fmt_money, money_to_input, parse_date, parse_int, parse_money
 
 SIMILARITY_MIN = 0.7   # proporción mínima de parecido entre descripciones (0 a 1)
 DELIMITER = ";"        # el de Excel en es-AR (la coma es el separador decimal)
@@ -103,12 +104,26 @@ def _parse_cell(field, cell, sucursales):
         if unknown:
             raise CeldaError("no existe la sucursal " + ", ".join(unknown) + ".")
         return sorted({sucursales[c] for c in codes})
+    if field.kind == "date":   # dd/mm/aaaa (también acepta aaaa-mm-dd, que es como lo guarda la base)
+        try:
+            return parse_date(cell)
+        except ValueError:
+            try:
+                return datetime.strptime(cell, "%Y-%m-%d").strftime("%Y-%m-%d")
+            except ValueError:
+                raise CeldaError(f"«{cell}» no es una fecha (usá dd/mm/aaaa).") from None
+    if field.kind == "email":
+        if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", cell):
+            raise CeldaError(f"«{cell}» no parece una dirección de mail.")
+        return cell.lower()
     return cell.upper()
 
 
 def _show(field, value, sucursales_by_id):
     if field.kind == "money":
         return fmt_money(value)
+    if field.kind == "date":
+        return fmt_date(value) or "(vacío)"
     if field.kind == "multi":
         return ", ".join(sucursales_by_id[i] for i in value if i in sucursales_by_id) or "(ninguna)"
     return str(value) if value != "" else "(vacío)"
@@ -239,5 +254,6 @@ def export_csv(repo, path):
         w.writerow([f.label for f in fields])
         for r in rows:
             w.writerow([money_to_input(r[f.key]) if f.kind == "money"
+                        else fmt_date(r[f.key]) if f.kind == "date"
                         else r[f.key + "_label"] if f.kind == "multi" else r[f.key] for f in fields])
     return len(rows)

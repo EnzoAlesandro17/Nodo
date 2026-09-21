@@ -212,8 +212,10 @@ CREATE TABLE IF NOT EXISTS sucursales (
 CREATE TABLE IF NOT EXISTS empleados (
     id      INTEGER PRIMARY KEY AUTOINCREMENT,
     nombre  TEXT NOT NULL,
-    rol     TEXT NOT NULL DEFAULT '',
-    celular TEXT NOT NULL DEFAULT '',
+    rol     TEXT NOT NULL DEFAULT '',                  -- cargo
+    celular TEXT NOT NULL DEFAULT '',                  -- teléfono
+    email   TEXT NOT NULL DEFAULT '',
+    fecha_nacimiento TEXT NOT NULL DEFAULT '',         -- AAAA-MM-DD o vacío
     activo  INTEGER NOT NULL DEFAULT 1
 );
 
@@ -387,8 +389,15 @@ def _m4_regular_y_porta_descuentan_sim(conn):
                 conn.execute(f"ALTER TABLE {tabla} ADD COLUMN {columna} {ddl}")
 
 
+def _m5_empleados_mail_y_nacimiento(conn):
+    for columna in ("email", "fecha_nacimiento"):
+        if columna not in _columnas(conn, "empleados"):
+            conn.execute(f"ALTER TABLE empleados ADD COLUMN {columna} TEXT NOT NULL DEFAULT ''")
+
+
 MIGRACIONES = [_m1_bases_anteriores_al_control_de_version, _m2_pagos_de_ventas_dadas_de_baja,
-               _m3_ventas_con_varios_productos_e_intereses, _m4_regular_y_porta_descuentan_sim]
+               _m3_ventas_con_varios_productos_e_intereses, _m4_regular_y_porta_descuentan_sim,
+               _m5_empleados_mail_y_nacimiento]
 
 
 def _migrar(conn):

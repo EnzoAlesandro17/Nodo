@@ -315,6 +315,10 @@ class FormDialog(tk.Toplevel):
                     cuantos = " u ".join([", ".join(map(str, largos[:-1])), str(largos[-1])] if len(largos) > 1
                                          else [str(largos[0])])
                     return self._fail(f"{f.label}: tiene que tener {cuantos} dígitos, solo números.", f)
+            if f.kind == "email":
+                raw = raw.lower()
+                if raw and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", raw):
+                    return self._fail(f"{f.label}: no parece una dirección válida.", f)
             if f.required and not raw:
                 return self._fail(f"{f.label} es obligatorio.", f)
             try:
@@ -322,7 +326,7 @@ class FormDialog(tk.Toplevel):
                     data[f.key] = parse_money(raw)
                 elif f.kind == "int":
                     data[f.key] = parse_int(raw, f.signed)
-                elif f.kind == "list":
+                elif f.kind in ("list", "email"):
                     data[f.key] = raw
                 else:
                     data[f.key] = raw.upper()
