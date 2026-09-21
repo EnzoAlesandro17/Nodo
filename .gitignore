@@ -1,0 +1,12 @@
+# Entorno virtual de cada PC (se arma con crear_entorno.bat)
+.venv/
+
+# Archivos temporales de Python
+__pycache__/
+*.pyc
+
+# La base de datos NO se sube: tiene datos de clientes y cada sucursal tiene la suya (se respalda a mano)
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
