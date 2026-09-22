@@ -10,9 +10,3 @@ class Transfer(Screen):
 class Conciliacion(Screen):
     title = "Conciliación"
     subtitle = "Conciliación de movimientos"
-
-
-class Consultas(Screen):
-    title = "Consultas"
-    subtitle = "Búsqueda y consulta de ventas cargadas"
-    actions = ("Buscar",)

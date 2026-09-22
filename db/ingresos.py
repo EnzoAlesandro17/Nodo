@@ -7,6 +7,12 @@ from datetime import datetime
 from db import connection, imeis, movimientos
 
 
+def ultima_sucursal():
+    """El id de la sucursal del último IMEI cargado (para proponerla en el próximo ingreso), o None."""
+    row = connection.get().execute("SELECT sucursal_id FROM imeis ORDER BY id DESC LIMIT 1").fetchone()
+    return row[0] if row else None
+
+
 def registrar(pedido, sucursal_id, fecha, items):
     """`items`: [(imei, equipo_id)]; `fecha`: "AAAA-MM-DD". ValueError (con el motivo) si algún IMEI se repite o ya
     está cargado: en ese caso no se guarda nada. Devuelve la cantidad de modelos distintos."""

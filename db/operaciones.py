@@ -1,0 +1,139 @@
+"""Operaciones (ventas, gestiones y gastos) de todas las tablas, en un solo listado, y las estadísticas.
+
+Cada operación es {fecha, tipo, origen, id, cliente, detalle, monto, unidades, vendedor_id, vendedor, sucursal}:
+  origen     la tabla de donde sale (para anularla): ventas, mov_accesorios, mov_equipos, casim, cater, regular, porta,
+             baf o gastos
+  tipo       ACCESORIOS, EQUIPOS, CASIM, CATER, REGULAR, PORTA, BAF (o GASTO, si se piden los gastos)
+  monto      lo vendido (Regular, Porta y BAF no llevan monto); el de un gasto va en positivo
+La venta de una SIM que generan CaSIM, Regular y Porta, y la de un equipo que genera CaTER, no se cuentan aparte:
+se cuentan en su gestión (igual que en la Caja).
+"""
+from datetime import date, timedelta
+
+from db import connection
+
+TIPOS = ("ACCESORIOS", "EQUIPOS", "CASIM", "CATER", "REGULAR", "PORTA", "BAF")
+TIPO_GASTO = "GASTO"
+
+_JOIN = ("LEFT JOIN empleados e ON e.id = {a}.vendedor_id LEFT JOIN sucursales s ON s.id = {a}.sucursal_id ")
+_COLS = "{a}.vendedor_id AS vendedor_id, e.nombre AS vendedor, s.codigo AS sucursal"
+
+_ORIGENES = (
+    # venta de Nuevo > Accesorios: una operación por venta (no por pago ni por producto)
+    "SELECT v.fecha, 'ACCESORIOS' AS tipo, 'ventas' AS origen, v.id, v.cliente, "
+    "(SELECT group_concat(a.codigo, ' + ') FROM mov_accesorios m JOIN accesorios a ON a.id = m.producto_id "
+    " WHERE m.venta_id = v.id AND m.activo = 1) AS detalle, "
+    "COALESCE((SELECT sum(m.precio * m.cantidad) FROM mov_accesorios m WHERE m.venta_id = v.id AND m.activo = 1), 0) AS monto, "
+    "COALESCE((SELECT sum(m.cantidad) FROM mov_accesorios m WHERE m.venta_id = v.id AND m.activo = 1), 0) AS unidades, "
+    + _COLS.format(a="v") + " FROM ventas v " + _JOIN.format(a="v") + "WHERE v.activo = 1",
+    # ventas sueltas de Stock > Movimientos
+    "SELECT m.fecha, 'ACCESORIOS', 'mov_accesorios', m.id, m.cliente, a.codigo || ' - ' || a.descripcion, "
+    "m.precio * m.cantidad, m.cantidad, " + _COLS.format(a="m") + " FROM mov_accesorios m "
+    "JOIN accesorios a ON a.id = m.producto_id " + _JOIN.format(a="m") + "WHERE m.activo = 1 AND m.tipo = 'VENTA' "
+    "AND m.venta_id IS NULL AND m.id NOT IN (SELECT mov_id FROM casim WHERE mov_id IS NOT NULL) "
+    "AND m.id NOT IN (SELECT mov_id FROM regular WHERE mov_id IS NOT NULL) "
+    "AND m.id NOT IN (SELECT mov_id FROM porta WHERE mov_id IS NOT NULL)",
+    "SELECT m.fecha, 'EQUIPOS', 'mov_equipos', m.id, m.cliente, q.codigo || ' - ' || q.descripcion, "
+    "m.precio * m.cantidad, m.cantidad, " + _COLS.format(a="m") + " FROM mov_equipos m "
+    "JOIN equipos q ON q.id = m.producto_id " + _JOIN.format(a="m") + "WHERE m.activo = 1 AND m.tipo = 'VENTA' "
+    "AND m.id NOT IN (SELECT mov_id FROM cater WHERE mov_id IS NOT NULL)",
+    # gestiones
+    "SELECT g.fecha, 'CASIM', 'casim', g.id, g.nombre, g.numero, g.monto, 1, " + _COLS.format(a="g")
+    + " FROM casim g " + _JOIN.format(a="g") + "WHERE g.activo = 1",
+    "SELECT g.fecha, 'CATER', 'cater', g.id, g.nombre, g.numero || ' · ' || q.descripcion, g.monto, 1, "
+    + _COLS.format(a="g") + " FROM cater g JOIN equipos q ON q.id = g.equipo_id " + _JOIN.format(a="g") + "WHERE g.activo = 1",
+    "SELECT g.fecha, 'REGULAR', 'regular', g.id, g.nombre, g.numero || ' · ' || p.codigo, 0.0, 1, "
+    + _COLS.format(a="g") + " FROM regular g JOIN planes p ON p.id = g.plan_id " + _JOIN.format(a="g") + "WHERE g.activo = 1",
+    "SELECT g.fecha, 'PORTA', 'porta', g.id, g.nombre, g.numero_portar || ' · ' || p.codigo, 0.0, 1, "
+    + _COLS.format(a="g") + " FROM porta g JOIN planes p ON p.id = g.plan_id " + _JOIN.format(a="g") + "WHERE g.activo = 1",
+    "SELECT g.fecha, 'BAF', 'baf', g.id, g.nombre, COALESCE(p.codigo, '') || ' · ' || g.estado, 0.0, 1, "   # BAF no tiene sucursal
+    "g.vendedor_id, e.nombre, '' FROM baf g LEFT JOIN planes_baf p ON p.id = g.plan_id "
+    "LEFT JOIN empleados e ON e.id = g.vendedor_id WHERE g.activo = 1 AND {baf}",
+)
+_GASTOS = ("SELECT g.fecha, 'GASTO', 'gastos', g.id, g.detalle, g.factura, g.monto, 1, " + _COLS.format(a="g")
+           + " FROM gastos g " + _JOIN.format(a="g") + "WHERE g.activo = 1")
+
+
+def operaciones(desde=None, hasta=None, con_gastos=False, solo_vigentes=False):
+    """Operaciones entre `desde` y `hasta` ("AAAA-MM-DD", inclusive, opcionales), la más reciente primero.
+    `con_gastos`: incluir los gastos. `solo_vigentes`: dejar afuera las BAF canceladas (para las estadísticas)."""
+    fuentes = [o.replace("{baf}", "g.estado <> 'Cancelada'" if solo_vigentes else "1") for o in _ORIGENES]
+    if con_gastos:
+        fuentes.append(_GASTOS)
+    where, params = [], []
+    if desde:
+        where.append("fecha >= ?")
+        params.append(desde)
+    if hasta:
+        where.append("fecha < ?")
+        params.append((date.fromisoformat(hasta) + timedelta(days=1)).isoformat())
+    sql = ("SELECT * FROM (" + " UNION ALL ".join(fuentes) + ")" + (f" WHERE {' AND '.join(where)}" if where else "")
+           + " ORDER BY fecha DESC, id DESC")
+    rows = [dict(r) for r in connection.get().execute(sql, params)]
+    for r in rows:
+        r["monto"] = round(r["monto"] or 0.0, 2)
+        r["cliente"], r["detalle"], r["vendedor"], r["sucursal"] = (r[k] or "" for k in ("cliente", "detalle", "vendedor", "sucursal"))
+    return rows
+
+
+def anular(origen, row_id):
+    """Da de baja una operación (con su efecto en el stock y en la caja). Devuelve un texto que explica qué pasó."""
+    from db import gestiones, movimientos   # acá para evitar importaciones circulares
+
+    if origen == "ventas":   # la venta entera: se anula dando de baja cualquiera de sus productos
+        mov = connection.get().execute("SELECT id FROM mov_accesorios WHERE venta_id = ? LIMIT 1", (row_id,)).fetchone()
+        if mov:
+            movimientos.mov_accesorios.deactivate(mov[0])
+        else:   # una venta sin productos activos (ya anulada): solo se marca
+            with connection.get() as db:
+                db.execute("UPDATE ventas SET activo = 0 WHERE id = ?", (row_id,))
+        return "Se anuló la venta: los productos volvieron al stock y sus pagos salieron de la caja."
+    repo = {"mov_accesorios": movimientos.mov_accesorios, "mov_equipos": movimientos.mov_equipos,
+            "casim": gestiones.casim, "cater": gestiones.cater, "regular": gestiones.regular,
+            "porta": gestiones.porta, "baf": gestiones.baf, "gastos": gestiones.gastos}[origen]
+    repo.deactivate(row_id)
+    if origen in ("mov_accesorios", "mov_equipos", "casim", "cater", "regular", "porta"):
+        return "Se dio de baja y el producto volvió al stock."
+    return "Se dio de baja."
+
+
+# --- estadísticas ---------------------------------------------------------------------------------------
+def anios():
+    """Los años con operaciones (el más reciente primero); siempre incluye el actual."""
+    años = {date.today().year} | {int(r["fecha"][:4]) for r in operaciones(con_gastos=True)}
+    return sorted(años, reverse=True)
+
+
+def por_mes(anio, agrupar="vendedor", medida="monto"):
+    """Ventas de un año por mes: ([(grupo, [12 valores], total)], totales por mes, total). Un grupo por vendedor o por tipo.
+    `medida`: "monto" (lo vendido) o "cantidad" (operaciones: ventas y gestiones). Ordenado por total, de mayor a menor."""
+    grupos = {}
+    for o in operaciones(f"{anio}-01-01", f"{anio}-12-31", solo_vigentes=True):
+        clave = o["tipo"] if agrupar == "tipo" else (o["vendedor"] or "(sin vendedor)")
+        meses = grupos.setdefault(clave, [0.0] * 12)
+        meses[int(o["fecha"][5:7]) - 1] += o["monto"] if medida == "monto" else 1
+    filas = sorted(((g, m, sum(m)) for g, m in grupos.items()), key=lambda f: (-f[2], f[0]))
+    columnas = [round(sum(m[i] for _, m, _ in filas), 2) for i in range(12)]
+    return filas, columnas, round(sum(columnas), 2)
+
+
+def _rango(anio, mes):
+    """(desde, hasta) de un mes de un año (o del año entero si `mes` es None), como "AAAA-MM-DD"."""
+    if mes is None:
+        return f"{anio}-01-01", f"{anio}-12-31"
+    ultimo = (date(anio + (mes == 12), mes % 12 + 1, 1) - timedelta(days=1)).day
+    return f"{anio}-{mes:02d}-01", f"{anio}-{mes:02d}-{ultimo:02d}"
+
+
+def top(producto, anio, mes=None, con_sims=False, limite=20):
+    """Los productos más vendidos, por unidades: [{codigo, descripcion, unidades, monto}].
+    `producto`: "accesorios" o "equipos". Los accesorios de la categoría SIMS (la SIM que se entrega en cada gestión)
+    quedan afuera salvo `con_sims`."""
+    tabla_mov, tabla_prod = ("mov_accesorios", "accesorios") if producto == "accesorios" else ("mov_equipos", "equipos")
+    desde, hasta = _rango(anio, mes)
+    sql = (f"SELECT p.codigo, p.descripcion, sum(m.cantidad) AS unidades, round(sum(m.precio * m.cantidad), 2) AS monto "
+           f"FROM {tabla_mov} m JOIN {tabla_prod} p ON p.id = m.producto_id "
+           f"WHERE m.activo = 1 AND m.tipo = 'VENTA' AND m.fecha >= ? AND m.fecha < date(?, '+1 day') "
+           + ("" if con_sims or producto != "accesorios" else "AND p.categoria <> 'SIMS' ")
+           + "GROUP BY p.id ORDER BY unidades DESC, monto DESC, p.codigo LIMIT ?")
+    return [dict(r) for r in connection.get().execute(sql, (desde, hasta, limite))]

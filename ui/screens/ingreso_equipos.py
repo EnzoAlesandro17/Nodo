@@ -43,7 +43,8 @@ class IngresoEquipos(Screen):
         self.cmb_sucursal.grid(row=1, column=0, sticky="w")
         ttk.Entry(head, textvariable=self.pedido, width=18).grid(row=1, column=1, padx=(16, 0))
         ttk.Entry(head, textvariable=self.fecha, width=12).grid(row=1, column=2, padx=(16, 0))
-        self.sucursal.set(next((label for label in self.sucursales if label.startswith("3ROSARIO")), ""))
+        ultima = ingresos.ultima_sucursal()   # la del último IMEI cargado
+        self.sucursal.set(next((label for label, i in self.sucursales.items() if i == ultima), ""))
 
         add = ttk.Frame(card, style="Inner.TFrame")
         add.pack(fill="x", pady=(16, 8))

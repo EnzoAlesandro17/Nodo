@@ -3,6 +3,7 @@ from datetime import date
 from tkinter import filedialog, messagebox, ttk
 
 from db import administracion, importer, stock
+from ui import backup_ui, theme
 from ui.base import Screen
 from ui.import_dialog import ImportPreview
 from ui.paths import escritorio
@@ -22,16 +23,26 @@ TABLAS = (
 
 class Data(Screen):
     title = "Data"
-    subtitle = "Descargá cada tabla y cargá cambios en masa con archivos CSV"
+    subtitle = "Copia de seguridad de la base y, por tabla, descarga y carga en masa con archivos CSV"
 
     def build(self, card):
-        card.configure(padding=24)
-        ttk.Label(card, style="Muted.TLabel", wraplength=900, justify="left", text=(
-            "Cada tabla tiene su propio archivo: cargar uno solo modifica esa tabla (subir la lista de sucursales no toca "
-            "los equipos). Al cargar, lo que ya existe se actualiza (se busca por el código o nombre de la columna "
-            "«Se identifica por») y lo nuevo se agrega; una celda vacía deja el valor como está y el stock nunca se toca. "
-            "Antes de aplicar se muestra una vista previa, y se puede dar de baja lo que no esté en el archivo. "
-            "Los archivos se abren con Excel.")).pack(anchor="w", pady=(0, 14))
+        card.configure(padding=(24, 16))
+        copia = ttk.Frame(card, style="Inner.TFrame")
+        copia.pack(fill="x")
+        ttk.Label(copia, text="Copia de seguridad", style="Card.TLabel", font=("Segoe UI", 12, "bold")).pack(side="left")
+        ttk.Button(copia, text="Hacer copia ahora", style="Accent.TButton", command=self._copia).pack(side="left", padx=(16, 0))
+        self.lbl_copia = ttk.Label(copia, style="Card.TLabel")
+        self.lbl_copia.pack(side="left", padx=14)
+        self._texto_copia()
+        ttk.Label(card, style="Muted.TLabel", wraplength=1000, justify="left", text=(
+            "Toda la base es un solo archivo. La copia sale verificada, donde elijas (te propone el Escritorio), aunque Nodo "
+            "esté abierto. Para restaurarla, copiala como nodo.db a la carpeta data con Nodo cerrado.")).pack(anchor="w", pady=(4, 0))
+        ttk.Separator(card).pack(fill="x", pady=8)
+        ttk.Label(card, text="Descargar y cargar por CSV", style="Card.TLabel", font=("Segoe UI", 12, "bold")).pack(anchor="w")
+        ttk.Label(card, style="Muted.TLabel", wraplength=1000, justify="left", text=(
+            "Cada tabla tiene su archivo: cargar uno solo modifica esa tabla. Lo que existe se actualiza (se busca por "
+            "«Se identifica por»), lo nuevo se agrega, una celda vacía deja el valor como está y el stock no se toca. "
+            "Antes de aplicar hay una vista previa. Los archivos se abren con Excel.")).pack(anchor="w", pady=(2, 6))
         grid = ttk.Frame(card, style="Inner.TFrame")
         grid.pack(fill="x")
         grid.columnconfigure(2, weight=1)
@@ -42,18 +53,26 @@ class Data(Screen):
         for r, (nombre, repo) in enumerate(TABLAS, start=1):
             clave = next(f.label for f in repo.fields if f.key == repo.clave)
             ttk.Label(grid, text=nombre, style="Card.TLabel", font=("Segoe UI", 11, "bold")).grid(
-                row=r, column=0, sticky="w", padx=(0, 24), pady=5)
+                row=r, column=0, sticky="w", padx=(0, 24), pady=1)
             ttk.Label(grid, text=clave, style="Card.TLabel").grid(row=r, column=1, sticky="w", padx=(0, 24))
             self.counts[nombre] = ttk.Label(grid, style="Muted.TLabel")
             self.counts[nombre].grid(row=r, column=2, sticky="w")
-            ttk.Button(grid, text="Descargar CSV", command=lambda n=nombre, p=repo: self._descargar(n, p)
-                       ).grid(row=r, column=3, padx=(8, 0), pady=3)
-            ttk.Button(grid, text="Cargar CSV", command=lambda n=nombre, p=repo: self._cargar(n, p)
-                       ).grid(row=r, column=4, padx=(8, 0), pady=3)
+            ttk.Button(grid, text="Descargar CSV", padding=(10, 2), command=lambda n=nombre, p=repo: self._descargar(n, p)
+                       ).grid(row=r, column=3, padx=(8, 0), pady=1)
+            ttk.Button(grid, text="Cargar CSV", padding=(10, 2), command=lambda n=nombre, p=repo: self._cargar(n, p)
+                       ).grid(row=r, column=4, padx=(8, 0), pady=1)
         self._counts()
 
     def build_actions(self, bar):
         """Sin barra de acciones: los botones están en cada tabla."""
+
+    def _texto_copia(self):
+        texto, avisar = backup_ui.texto_ultima_copia()
+        self.lbl_copia.config(text=texto, foreground=theme.DANGER if avisar else theme.MUTED)
+
+    def _copia(self):
+        backup_ui.hacer_copia(self.winfo_toplevel())
+        self._texto_copia()
 
     def _counts(self):
         for nombre, repo in TABLAS:

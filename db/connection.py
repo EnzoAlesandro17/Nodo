@@ -103,6 +103,35 @@ CREATE TABLE IF NOT EXISTS gastos (
     activo        INTEGER NOT NULL DEFAULT 1
 );
 
+-- Arqueo de caja (Caja > Arqueo de caja, traído de MyTools): lo que hay en la caja fuerte (CF) y en la caja chica (CC)
+-- contra el saldo que dice el sistema (SS). resultado = CF + CC - SS: positivo sobra, negativo falta, y se arrastra de
+-- un arqueo al siguiente (la variación de cada uno es su resultado menos el del arqueo anterior).
+-- Cada monto guarda lo que se escribió (cf_expr: "700.000+100.000") y su suma (cf_val).
+CREATE TABLE IF NOT EXISTS arqueos (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha     TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    cf_expr   TEXT NOT NULL DEFAULT '0',
+    cf_val    REAL NOT NULL DEFAULT 0,
+    cc_expr   TEXT NOT NULL DEFAULT '0',
+    cc_val    REAL NOT NULL DEFAULT 0,
+    sc_expr   TEXT NOT NULL DEFAULT '0',
+    sc_val    REAL NOT NULL DEFAULT 0,
+    resultado REAL NOT NULL DEFAULT 0,
+    activo    INTEGER NOT NULL DEFAULT 1
+);
+
+-- Quiénes hicieron el arqueo: el nombre tal como estaba en ese momento (no cambia si después se renombra al empleado)
+CREATE TABLE IF NOT EXISTS arqueo_empleados (
+    arqueo_id INTEGER NOT NULL REFERENCES arqueos(id),
+    nombre    TEXT    NOT NULL
+);
+
+-- Datos sueltos de la app (p. ej. cuándo se hizo la última copia de seguridad)
+CREATE TABLE IF NOT EXISTS ajustes (
+    clave TEXT PRIMARY KEY,
+    valor TEXT NOT NULL DEFAULT ''
+);
+
 CREATE TABLE IF NOT EXISTS planes (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     codigo      TEXT NOT NULL UNIQUE,
@@ -194,7 +223,7 @@ CREATE TABLE IF NOT EXISTS baf (
 
 CREATE TABLE IF NOT EXISTS sucursales (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    codigo      TEXT NOT NULL UNIQUE,      -- nombre clave, p. ej. 3ROSARIO
+    codigo      TEXT NOT NULL UNIQUE,      -- nombre clave: tipo + número (A001, L002...); el nombre legible va en `nombre`
     entidad     TEXT NOT NULL DEFAULT '',
     nombre      TEXT NOT NULL,
     calle       TEXT NOT NULL DEFAULT '',

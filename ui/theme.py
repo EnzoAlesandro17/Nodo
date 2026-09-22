@@ -12,6 +12,7 @@ TEXT = "#111827"
 MUTED = "#6b7280"
 BORDER = "#e5e7eb"
 DANGER = "#dc2626"
+OK = "#15803d"          # verde: sobra, bien
 ZEBRA = "#f9fafb"
 
 FONT = ("Segoe UI", 10)
