@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS accesorios (
     precio_mayorista REAL    NOT NULL DEFAULT 0,
     precio_minorista REAL    NOT NULL DEFAULT 0,
     stock            INTEGER NOT NULL DEFAULT 0,
-    virtual          INTEGER NOT NULL DEFAULT 0,  -- 1 = producto virtual (E-SIM): no maneja stock
+    virtual          INTEGER NOT NULL DEFAULT 0,  -- 1 = producto virtual: no maneja stock
     activo           INTEGER NOT NULL DEFAULT 1   -- 0 = dado de baja (borrado lógico)
 );
 
@@ -36,31 +36,42 @@ CREATE TABLE IF NOT EXISTS equipos (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     codigo      TEXT    NOT NULL UNIQUE,
     descripcion TEXT    NOT NULL,
-    marca       TEXT    NOT NULL DEFAULT '',
+    marca       TEXT    NOT NULL DEFAULT '',   -- "SIM" para los chips: no son un accesorio, Claro los manda con los equipos
     modelo      TEXT    NOT NULL DEFAULT '',
     rom         TEXT    NOT NULL DEFAULT '',
     ram         TEXT    NOT NULL DEFAULT '',
     color       TEXT    NOT NULL DEFAULT '',
     precio      REAL    NOT NULL DEFAULT 0,  -- precio sugerido: orientativo, en la venta se puede cambiar
     stock       INTEGER NOT NULL DEFAULT 0,
+    virtual     INTEGER NOT NULL DEFAULT 0,  -- 1 = no lleva stock (la E-SIM)
     activo      INTEGER NOT NULL DEFAULT 1
 );
+"""
 
+# CaSIM, Regular y Porta: sim_id apunta a un equipo (marca "SIM"), no a un accesorio. Sin IMEI: la sucursal no
+# las entrega en orden y varias se pierden o se mezclan, así que no vale la pena cargar un número de serie por
+# unidad (a diferencia de un equipo de verdad). Van en constantes propias porque SQLite no permite cambiar el
+# REFERENCES de una columna existente: la migración que las trae de Accesorios reconstruye la tabla con esta
+# misma definición (ver _m7_chips_a_equipos).
+CASIM_DDL = """
 CREATE TABLE IF NOT EXISTS casim (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     fecha         TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
     nombre        TEXT    NOT NULL,
     numero        TEXT    NOT NULL,
-    sim_id        INTEGER NOT NULL REFERENCES accesorios(id),
+    sim_id        INTEGER NOT NULL REFERENCES equipos(id),
     monto         REAL    NOT NULL DEFAULT 0,
     cuenta_id     INTEGER REFERENCES cuentas(id),
     vendedor_id   INTEGER REFERENCES empleados(id),
     sucursal_id   INTEGER REFERENCES sucursales(id),
-    mov_id        INTEGER,                     -- movimiento de VENTA que generó (mov_accesorios / mov_equipos)
+    mov_id        INTEGER,                     -- movimiento de VENTA que generó (mov_equipos)
     observaciones TEXT    NOT NULL DEFAULT '',
     activo        INTEGER NOT NULL DEFAULT 1
 );
+"""
+SCHEMA += CASIM_DDL
 
+SCHEMA += """
 CREATE TABLE IF NOT EXISTS cater (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     fecha         TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
@@ -145,7 +156,9 @@ CREATE TABLE IF NOT EXISTS descuentos (
     descripcion TEXT NOT NULL,
     activo      INTEGER NOT NULL DEFAULT 1
 );
+"""
 
+REGULAR_DDL = """
 CREATE TABLE IF NOT EXISTS regular (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     fecha         TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
@@ -157,13 +170,16 @@ CREATE TABLE IF NOT EXISTS regular (
     numero        TEXT    NOT NULL,              -- el número nuevo
     id_gestion    TEXT    NOT NULL,              -- 9 dígitos
     vendedor_id   INTEGER REFERENCES empleados(id),
-    sim_id        INTEGER REFERENCES accesorios(id),   -- la SIM que se entrega: descuenta stock
+    sim_id        INTEGER REFERENCES equipos(id),   -- la SIM que se entrega: descuenta stock
     sucursal_id   INTEGER REFERENCES sucursales(id),
-    mov_id        INTEGER,                             -- movimiento de VENTA de la SIM (mov_accesorios)
+    mov_id        INTEGER,                             -- movimiento de VENTA de la SIM (mov_equipos)
     observaciones TEXT    NOT NULL DEFAULT '',
     activo        INTEGER NOT NULL DEFAULT 1
 );
+"""
+SCHEMA += REGULAR_DDL
 
+PORTA_DDL = """
 CREATE TABLE IF NOT EXISTS porta (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     fecha         TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
@@ -176,15 +192,19 @@ CREATE TABLE IF NOT EXISTS porta (
     descuento_id  INTEGER REFERENCES descuentos(id),
     nim           TEXT    NOT NULL,              -- NIM temporal
     pin           TEXT    NOT NULL DEFAULT '',   -- PIN ingresado durante la portabilidad
+    fecha_portacion TEXT  NOT NULL DEFAULT '',   -- AAAA-MM-DD o vacío
     id_gestion    TEXT    NOT NULL,              -- 9 dígitos
     vendedor_id   INTEGER REFERENCES empleados(id),
-    sim_id        INTEGER REFERENCES accesorios(id),   -- la SIM que se entrega: descuenta stock
+    sim_id        INTEGER REFERENCES equipos(id),   -- la SIM que se entrega: descuenta stock
     sucursal_id   INTEGER REFERENCES sucursales(id),
-    mov_id        INTEGER,                             -- movimiento de VENTA de la SIM (mov_accesorios)
+    mov_id        INTEGER,                             -- movimiento de VENTA de la SIM (mov_equipos)
     observaciones TEXT    NOT NULL DEFAULT '',
     activo        INTEGER NOT NULL DEFAULT 1
 );
+"""
+SCHEMA += PORTA_DDL
 
+SCHEMA += """
 CREATE TABLE IF NOT EXISTS planes_baf (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     codigo      TEXT NOT NULL UNIQUE,      -- p. ej. 500MB
@@ -262,6 +282,14 @@ CREATE TABLE IF NOT EXISTS cuentas (
     descripcion   TEXT NOT NULL,
     saldo_inicial REAL NOT NULL DEFAULT 0,
     activo        INTEGER NOT NULL DEFAULT 1
+);
+
+-- Días que el local no abre (feriados, balance...), para la proyección mensual de Estadísticas.
+CREATE TABLE IF NOT EXISTS cierres (
+    id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha  TEXT    NOT NULL UNIQUE,
+    motivo TEXT    NOT NULL DEFAULT '',
+    activo INTEGER NOT NULL DEFAULT 1
 );
 """
 
@@ -424,9 +452,79 @@ def _m5_empleados_mail_y_nacimiento(conn):
             conn.execute(f"ALTER TABLE empleados ADD COLUMN {columna} TEXT NOT NULL DEFAULT ''")
 
 
+def _m6_porta_fecha_portacion(conn):
+    if "fecha_portacion" not in _columnas(conn, "porta"):
+        conn.execute("ALTER TABLE porta ADD COLUMN fecha_portacion TEXT NOT NULL DEFAULT ''")
+
+
+def _m7_chips_a_equipos(conn):
+    """Los chips (SIM física y E-SIM) pasan de Accesorios a Equipos, sin IMEI: no son un accesorio como tal,
+    y Claro también los manda en el mismo pedido que los equipos. CaSIM, Regular y Porta ahora entregan un
+    equipo (marca "SIM") en vez de un accesorio: sim_id pasa a apuntar a equipos, y su movimiento de VENTA
+    pasa de mov_accesorios a mov_equipos (se mueve tal cual: misma fecha, cantidad, medio de cobro...).
+    Ninguno tenía venta_id ni pagos propios (se comprobó antes de escribir esta migración), así que no hay
+    nada que se pierda en el pase. Los accesorios viejos quedan dados de baja, no se borran."""
+    if "virtual" not in _columnas(conn, "equipos"):
+        conn.execute("ALTER TABLE equipos ADD COLUMN virtual INTEGER NOT NULL DEFAULT 0")
+    chips = conn.execute("SELECT id, codigo, descripcion, stock, virtual FROM accesorios "
+                         "WHERE categoria = 'SIMS' AND activo = 1").fetchall()
+    if not chips:
+        return   # base nueva (ya nace con SCHEMA al día), o esta migración ya corrió
+    equivalencia = {}   # id de accesorios -> id de equipos
+    for id_acc, codigo, descripcion, stock, virtual in chips:
+        existente = conn.execute("SELECT id FROM equipos WHERE codigo = ?", (codigo,)).fetchone()
+        if existente:   # el código ya está de otra vez (dado de baja o no): se reactiva y se completa
+            id_eq = existente[0]
+            conn.execute("UPDATE equipos SET descripcion = ?, marca = 'SIM', stock = ?, virtual = ?, activo = 1 "
+                        "WHERE id = ?", (descripcion, stock, virtual, id_eq))
+        else:
+            cur = conn.execute("INSERT INTO equipos (codigo, descripcion, marca, stock, virtual) "
+                               "VALUES (?, ?, 'SIM', ?, ?)", (codigo, descripcion, stock, virtual))
+            id_eq = cur.lastrowid
+        equivalencia[id_acc] = id_eq
+
+    # sim_id apuntaba a accesorios: SQLite no permite cambiar el REFERENCES de una columna existente, así que
+    # cada tabla se reconstruye con la definición nueva (CASIM_DDL / REGULAR_DDL / PORTA_DDL, ya con sim_id
+    # REFERENCES equipos) y se reescribe sim_id de paso.
+    for tabla, ddl in (("casim", CASIM_DDL), ("regular", REGULAR_DDL), ("porta", PORTA_DDL)):
+        columnas = _columnas(conn, tabla)
+        casos = " ".join(f"WHEN sim_id = {viejo} THEN {nuevo}" for viejo, nuevo in equivalencia.items())
+        select = ", ".join(f"CASE {casos} ELSE sim_id END" if c == "sim_id" else c for c in columnas)
+        conn.execute(f"ALTER TABLE {tabla} RENAME TO {tabla}_viejo")
+        conn.execute(ddl)
+        conn.execute(f"INSERT INTO {tabla} ({', '.join(columnas)}) SELECT {select} FROM {tabla}_viejo")
+        conn.execute(f"DROP TABLE {tabla}_viejo")
+
+    # los movimientos de esos chips pasan de mov_accesorios a mov_equipos
+    mov_equivalencia = {}   # id de mov_accesorios -> id de mov_equipos
+    for id_acc, id_eq in equivalencia.items():
+        movs = conn.execute("SELECT id, fecha, tipo, cantidad, precio, cliente, medio, vendedor_id, "
+                            "sucursal_id, cupon, factura, observaciones, activo FROM mov_accesorios "
+                            "WHERE producto_id = ?", (id_acc,)).fetchall()
+        for (mov_id, fecha, tipo, cantidad, precio, cliente, medio, vendedor_id, sucursal_id, cupon, factura,
+             observaciones, activo) in movs:
+            cur = conn.execute(
+                "INSERT INTO mov_equipos (fecha, tipo, producto_id, cantidad, precio, cliente, medio, "
+                "vendedor_id, sucursal_id, cupon, factura, observaciones, activo, imei) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '')",
+                (fecha, tipo, id_eq, cantidad, precio, cliente, medio, vendedor_id, sucursal_id, cupon,
+                 factura, observaciones, activo))
+            mov_equivalencia[mov_id] = cur.lastrowid
+        conn.execute("DELETE FROM mov_accesorios WHERE producto_id = ?", (id_acc,))
+
+    for tabla in ("casim", "regular", "porta"):
+        for row_id, mov_id in conn.execute(f"SELECT id, mov_id FROM {tabla} WHERE mov_id IS NOT NULL").fetchall():
+            nuevo = mov_equivalencia.get(mov_id)
+            if nuevo is not None:
+                conn.execute(f"UPDATE {tabla} SET mov_id = ? WHERE id = ?", (nuevo, row_id))
+
+    conn.execute(f"UPDATE accesorios SET activo = 0 WHERE id IN ({', '.join('?' * len(equivalencia))})",
+                list(equivalencia))
+
+
 MIGRACIONES = [_m1_bases_anteriores_al_control_de_version, _m2_pagos_de_ventas_dadas_de_baja,
                _m3_ventas_con_varios_productos_e_intereses, _m4_regular_y_porta_descuentan_sim,
-               _m5_empleados_mail_y_nacimiento]
+               _m5_empleados_mail_y_nacimiento, _m6_porta_fecha_portacion, _m7_chips_a_equipos]
 
 
 def _migrar(conn):

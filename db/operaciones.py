@@ -14,6 +14,7 @@ from db import connection
 
 TIPOS = ("ACCESORIOS", "EQUIPOS", "CASIM", "CATER", "REGULAR", "PORTA", "BAF")
 TIPO_GASTO = "GASTO"
+TIPOS_GESTION = ("CATER", "REGULAR", "PORTA", "BAF")   # CaSIM queda afuera de la matriz de Estadísticas
 
 _JOIN = ("LEFT JOIN empleados e ON e.id = {a}.vendedor_id LEFT JOIN sucursales s ON s.id = {a}.sucursal_id ")
 _COLS = "{a}.vendedor_id AS vendedor_id, e.nombre AS vendedor, s.codigo AS sucursal"
@@ -30,13 +31,15 @@ _ORIGENES = (
     "SELECT m.fecha, 'ACCESORIOS', 'mov_accesorios', m.id, m.cliente, a.codigo || ' - ' || a.descripcion, "
     "m.precio * m.cantidad, m.cantidad, " + _COLS.format(a="m") + " FROM mov_accesorios m "
     "JOIN accesorios a ON a.id = m.producto_id " + _JOIN.format(a="m") + "WHERE m.activo = 1 AND m.tipo = 'VENTA' "
-    "AND m.venta_id IS NULL AND m.id NOT IN (SELECT mov_id FROM casim WHERE mov_id IS NOT NULL) "
-    "AND m.id NOT IN (SELECT mov_id FROM regular WHERE mov_id IS NOT NULL) "
-    "AND m.id NOT IN (SELECT mov_id FROM porta WHERE mov_id IS NOT NULL)",
+    "AND m.venta_id IS NULL",
+    # las de CaTER, CaSIM, Regular y Porta (mov_equipos) ya se cuentan en su propia gestión, más abajo
     "SELECT m.fecha, 'EQUIPOS', 'mov_equipos', m.id, m.cliente, q.codigo || ' - ' || q.descripcion, "
     "m.precio * m.cantidad, m.cantidad, " + _COLS.format(a="m") + " FROM mov_equipos m "
     "JOIN equipos q ON q.id = m.producto_id " + _JOIN.format(a="m") + "WHERE m.activo = 1 AND m.tipo = 'VENTA' "
-    "AND m.id NOT IN (SELECT mov_id FROM cater WHERE mov_id IS NOT NULL)",
+    "AND m.id NOT IN (SELECT mov_id FROM cater WHERE mov_id IS NOT NULL) "
+    "AND m.id NOT IN (SELECT mov_id FROM casim WHERE mov_id IS NOT NULL) "
+    "AND m.id NOT IN (SELECT mov_id FROM regular WHERE mov_id IS NOT NULL) "
+    "AND m.id NOT IN (SELECT mov_id FROM porta WHERE mov_id IS NOT NULL)",
     # gestiones
     "SELECT g.fecha, 'CASIM', 'casim', g.id, g.nombre, g.numero, g.monto, 1, " + _COLS.format(a="g")
     + " FROM casim g " + _JOIN.format(a="g") + "WHERE g.activo = 1",
@@ -104,36 +107,45 @@ def anios():
     return sorted(años, reverse=True)
 
 
-def por_mes(anio, agrupar="vendedor", medida="monto"):
-    """Ventas de un año por mes: ([(grupo, [12 valores], total)], totales por mes, total). Un grupo por vendedor o por tipo.
-    `medida`: "monto" (lo vendido) o "cantidad" (operaciones: ventas y gestiones). Ordenado por total, de mayor a menor."""
-    grupos = {}
-    for o in operaciones(f"{anio}-01-01", f"{anio}-12-31", solo_vigentes=True):
-        clave = o["tipo"] if agrupar == "tipo" else (o["vendedor"] or "(sin vendedor)")
-        meses = grupos.setdefault(clave, [0.0] * 12)
-        meses[int(o["fecha"][5:7]) - 1] += o["monto"] if medida == "monto" else 1
-    filas = sorted(((g, m, sum(m)) for g, m in grupos.items()), key=lambda f: (-f[2], f[0]))
-    columnas = [round(sum(m[i] for _, m, _ in filas), 2) for i in range(12)]
-    return filas, columnas, round(sum(columnas), 2)
+def resumen_gestiones(desde=None, hasta=None):
+    """Cantidad de gestiones (CaTER, Regular, Porta y BAF; CaSIM queda afuera) en el período ("AAAA-MM-DD",
+    inclusive, opcionales), sin accesorios ni equipos: una matriz de vendedor x tipo de gestión, con el total
+    de cada fila y columna. Devuelve (tipos, filas, columnas, monto_total, cantidad_total):
+      tipos     siempre los cuatro tipos, en este orden, tengan gestiones o no en el período
+      filas     [(vendedor, [cantidad por tipo, en el orden de `tipos`], total de la fila)], por total, de
+                mayor a menor
+      columnas  total de cada tipo, en el mismo orden
+    El monto (lo que cobra CaTER; Regular, Porta y BAF no cobran) va aparte, como un solo total."""
+    filas_op = [o for o in operaciones(desde, hasta, solo_vigentes=True) if o["tipo"] in TIPOS_GESTION]
+    tipos = list(TIPOS_GESTION)
+    matriz = {}
+    for o in filas_op:
+        fila = matriz.setdefault(o["vendedor"] or "(sin vendedor)", {t: 0 for t in tipos})
+        fila[o["tipo"]] += 1
+    filas = sorted(((v, [f[t] for t in tipos], sum(f.values())) for v, f in matriz.items()),
+                   key=lambda r: (-r[2], r[0]))
+    columnas = [sum(f[i] for _, f, _ in filas) for i in range(len(tipos))]
+    monto_total = round(sum(o["monto"] for o in filas_op), 2)
+    return tipos, filas, columnas, monto_total, len(filas_op)
 
 
-def _rango(anio, mes):
-    """(desde, hasta) de un mes de un año (o del año entero si `mes` es None), como "AAAA-MM-DD"."""
-    if mes is None:
-        return f"{anio}-01-01", f"{anio}-12-31"
-    ultimo = (date(anio + (mes == 12), mes % 12 + 1, 1) - timedelta(days=1)).day
-    return f"{anio}-{mes:02d}-01", f"{anio}-{mes:02d}-{ultimo:02d}"
-
-
-def top(producto, anio, mes=None, con_sims=False, limite=20):
-    """Los productos más vendidos, por unidades: [{codigo, descripcion, unidades, monto}].
-    `producto`: "accesorios" o "equipos". Los accesorios de la categoría SIMS (la SIM que se entrega en cada gestión)
-    quedan afuera salvo `con_sims`."""
+def top(producto, desde=None, hasta=None, con_sims=False, limite=20):
+    """Los productos más vendidos, por unidades, entre `desde` y `hasta` ("AAAA-MM-DD", inclusive, opcionales):
+    [{codigo, descripcion, unidades, monto}]. `producto`: "accesorios" o "equipos". La SIM que se entrega en
+    cada gestión (accesorios de categoría SIMS, o equipos marca SIM) queda afuera salvo `con_sims`."""
     tabla_mov, tabla_prod = ("mov_accesorios", "accesorios") if producto == "accesorios" else ("mov_equipos", "equipos")
-    desde, hasta = _rango(anio, mes)
+    filtro_sim = "p.categoria <> 'SIMS'" if producto == "accesorios" else "p.marca <> 'SIM'"
+    where, params = ["m.activo = 1", "m.tipo = 'VENTA'"], []
+    if desde:
+        where.append("m.fecha >= ?")
+        params.append(desde)
+    if hasta:
+        where.append("m.fecha < ?")
+        params.append((date.fromisoformat(hasta) + timedelta(days=1)).isoformat())
+    if not con_sims:
+        where.append(filtro_sim)
     sql = (f"SELECT p.codigo, p.descripcion, sum(m.cantidad) AS unidades, round(sum(m.precio * m.cantidad), 2) AS monto "
            f"FROM {tabla_mov} m JOIN {tabla_prod} p ON p.id = m.producto_id "
-           f"WHERE m.activo = 1 AND m.tipo = 'VENTA' AND m.fecha >= ? AND m.fecha < date(?, '+1 day') "
-           + ("" if con_sims or producto != "accesorios" else "AND p.categoria <> 'SIMS' ")
-           + "GROUP BY p.id ORDER BY unidades DESC, monto DESC, p.codigo LIMIT ?")
-    return [dict(r) for r in connection.get().execute(sql, (desde, hasta, limite))]
+           f"WHERE {' AND '.join(where)} GROUP BY p.id ORDER BY unidades DESC, monto DESC, p.codigo LIMIT ?")
+    params.append(limite)
+    return [dict(r) for r in connection.get().execute(sql, params)]

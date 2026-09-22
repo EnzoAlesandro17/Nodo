@@ -43,8 +43,20 @@ class FormDialog(tk.Toplevel):
                   ).grid(row=0, column=0, columnspan=2 * columns, sticky="w", pady=(0, 12))
 
         ew = 34 if columns == 1 else 24   # ancho de los campos
-        for n, f in enumerate(fields):
-            r, lc = n // columns + 1, n % columns * 2   # fila y columna del rótulo; el campo va en lc + 1
+        row, col, section = 1, 0, None
+        for f in fields:
+            if f.section and f.section != section:
+                if col:   # cierra la fila a medias antes de pasar a la sección siguiente
+                    row, col = row + 1, 0
+                ttk.Label(body, text=f.section, font=theme.FONT_BOLD, foreground=theme.ACCENT
+                          ).grid(row=row, column=0, columnspan=2 * columns, sticky="w",
+                                 pady=(14 if section else 0, 8))
+                row += 1
+                section = f.section
+            r, lc = row, col * 2   # fila y columna del rótulo; el campo va en lc + 1
+            col += 1
+            if col == columns:
+                col, row = 0, row + 1
             label = ttk.Frame(body)
             ttk.Label(label, text=f.label).pack(side="left")
             if f.required:
@@ -101,7 +113,7 @@ class FormDialog(tk.Toplevel):
                 self._toggle(f, keep=True)
 
         self.error = ttk.Label(body, text="", foreground=theme.DANGER, wraplength=380 * columns)
-        self.error.grid(row=(len(fields) - 1) // columns + 2, column=0, columnspan=2 * columns, sticky="w",
+        self.error.grid(row=row if col == 0 else row + 1, column=0, columnspan=2 * columns, sticky="w",
                         pady=(10, 0))
 
         bar = ttk.Frame(self, padding=(28, 8, 28, 22))

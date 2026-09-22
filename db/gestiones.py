@@ -147,9 +147,9 @@ class GestionVentaRepo(GestionRepo):
             self._deactivate_row(row_id)
 
 
-casim = GestionVentaRepo("casim", CASIM, "vendedor_id", "sim_id", "mov_accesorios", "CASIM")
+casim = GestionVentaRepo("casim", CASIM, "vendedor_id", "sim_id", "mov_equipos", "CASIM")
 cater = GestionVentaRepo("cater", CATER, "vendedor_id", "equipo_id", "mov_equipos", "CATER")
-regular = GestionVentaRepo("regular", REGULAR, "vendedor_id", "sim_id", "mov_accesorios", "REGULAR")
-porta = GestionVentaRepo("porta", PORTA, "vendedor_id", "sim_id", "mov_accesorios", "PORTA", numero_key="numero_portar")
+regular = GestionVentaRepo("regular", REGULAR, "vendedor_id", "sim_id", "mov_equipos", "REGULAR")
+porta = GestionVentaRepo("porta", PORTA, "vendedor_id", "sim_id", "mov_equipos", "PORTA", numero_key="numero_portar")
 baf = GestionRepo("baf", BAF, filter_key="estado")
 gastos = GestionRepo("gastos", GASTOS, filter_key="vendedor_id")

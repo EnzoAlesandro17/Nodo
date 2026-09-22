@@ -11,7 +11,7 @@ class CaSIM(GestionVentaScreen):
     title = "Gestiones · CaSIM"
     subtitle = "Cambio de chip de un número"
     repo = repos.casim
-    ref_filters = {"sim_id": "SIMS"}   # el Tipo de SIM ofrece solo accesorios de la categoría SIMS
+    ref_filters = {"sim_id": "SIM"}   # el Tipo de SIM ofrece solo equipos marca SIM (no son un accesorio ni llevan IMEI)
     form_new, form_edit = "Nueva gestión CaSIM", "Editar gestión CaSIM"
 
 
@@ -26,7 +26,7 @@ class Regular(GestionVentaScreen):
     title = "Gestiones · Regular"
     subtitle = "Alta de línea con plan regular"
     repo = repos.regular
-    ref_filters = {"sim_id": "SIMS"}
+    ref_filters = {"sim_id": "SIM"}
     sim_default = SIM_FISICA
     form_new, form_edit = "Nueva gestión Regular", "Editar gestión Regular"
 
@@ -35,7 +35,7 @@ class Porta(GestionVentaScreen):
     title = "Gestiones · Porta"
     subtitle = "Alta de línea con portabilidad"
     repo = repos.porta
-    ref_filters = {"sim_id": "SIMS"}
+    ref_filters = {"sim_id": "SIM"}
     sim_default = SIM_FISICA
     number_key = "numero_portar"
     form_new, form_edit = "Nueva gestión Porta", "Editar gestión Porta"
@@ -47,8 +47,16 @@ class BAF(GestionScreen):
     repo = repos.baf
     number_key = "telefono"
     form_columns = 2
-    left_keys = ("nombre", "observaciones")
+    left_keys = ("nombre",)
     form_new, form_edit = "Nueva gestión BAF", "Editar gestión BAF"
+
+    # En la tabla, este orden (no el del formulario, agrupado por sección: ver models.BAF).
+    _COLUMNAS_TABLA = ("fecha", "nombre", "plan_id", "estado", "fecha_pactada", "fecha_instalacion")
+
+    @property
+    def columns(self):
+        por_clave = {f.key: f for f in self.fields}
+        return [por_clave[k] for k in self._COLUMNAS_TABLA]
 
     def _validate(self, data):
         estado = data["estado"]

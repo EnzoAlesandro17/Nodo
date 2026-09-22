@@ -48,8 +48,8 @@ class MovimientoRepo(GestionRepo):
             imeis.soltar(f"{self.table}:{row_id}")
 
     def _sin_stock(self):
-        """Condición SQL de los productos que no llevan stock (solo los accesorios virtuales)."""
-        return "virtual = 1" if self.producto_table == "accesorios" else "0"
+        """Condición SQL de los productos que no llevan stock (los virtuales: accesorios o equipos, como la E-SIM)."""
+        return "virtual = 1"
 
     def _sumar_stock(self, producto_id, cantidad):
         if cantidad:

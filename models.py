@@ -33,6 +33,7 @@ class Field:
     digits: int | tuple = 0  # text: si > 0, tiene que ser un número de esa cantidad de dígitos (o de una de ellas)
     total: str = ""         # pagos: campo con el monto total a pagar
     suggests: str = ""      # select: al elegir un registro, propone su precio en este otro campo (si está vacío)
+    section: str = ""       # formulario: título que agrupa este campo con los siguientes de la misma sección
 
 
 NUMERIC_KINDS = ("money", "int")
@@ -59,6 +60,7 @@ EQUIPOS = (
     Field("imeis", "IMEI", kind="calc", width=60),
     Field("dias", "Antig. máx. (días)", kind="calc", width=120),
     Field("stock", "Stock", kind="int", width=80),
+    Field("virtual", "Virtual (sin stock)", kind="bool", disables="stock"),   # 1 = la E-SIM
 )
 
 MEDIOS_COBRO = ("EFE", "VISA", "MASTER", "MAESTRO", "AMEX", "NARANJA", "CONSUMAX", "QR")   # EFE = efectivo
@@ -68,7 +70,7 @@ CASIM = (
     Field("fecha", "Fecha y hora", kind="datetime", required=True, width=130),
     Field("nombre", "Nombre o Razón", required=True, width=140),
     Field("numero", "Número", required=True, width=100, digits=10),
-    Field("sim_id", "Tipo de SIM", kind="select", required=True, width=160, ref="accesorios"),
+    Field("sim_id", "Tipo de SIM", kind="select", required=True, width=160, ref="equipos"),
     Field("monto", "Monto", kind="money", width=90),
     Field("cuenta_id", "Cuenta", kind="select", width=100, ref="cuentas"),
     Field("vendedor_id", "Vendedor", kind="select", width=100, ref="empleados"),
@@ -93,51 +95,87 @@ def _linea(numero_a, numero_b, tras_a=(), tras_b=()):
         *tras_b,
         Field("id_gestion", "ID de gestión", required=True, width=90, digits=9),
         Field("vendedor_id", "Vendedor", kind="select", width=100, ref="empleados"),
-        Field("sim_id", "Tipo de SIM", kind="select", required=True, width=140, ref="accesorios", in_table=False),
+        Field("sim_id", "Tipo de SIM", kind="select", required=True, width=140, ref="equipos", in_table=False),
         Field("sucursal_id", "Sucursal", kind="select", required=True, width=100, ref="sucursales", in_table=False),
         Field("observaciones", "Observaciones", width=140, stretch=True),
     )
 
 
-REGULAR = _linea(("telefono", "Teléfono de contacto", False), ("numero", "Nuevo número", True))
+# Regular y Porta: obligatorios solo Fecha y hora, Nombre, el número que identifica la línea (Nuevo número / Número
+# a portar), Plan, Vendedor, Sucursal y Tipo de SIM; el resto se completa después, editando. En la tabla solo se ven
+# Fecha y hora, Nombre, ese número, Plan, Vendedor y Observaciones, con el ancho de Nombre (el doble para Observaciones).
+_ANCHO_LINEA = 140   # el de "Nombre o Razón"
+
+
+def _ajustar_linea(fields, numero_key, ocultos):
+    anchos = {"fecha": _ANCHO_LINEA, numero_key: _ANCHO_LINEA, "plan_id": _ANCHO_LINEA, "vendedor_id": _ANCHO_LINEA,
+             "observaciones": _ANCHO_LINEA * 2}
+
+    def ajustar(f):
+        if f.key == "vendedor_id":
+            f = replace(f, required=True)
+        if f.key in ocultos:
+            f = replace(f, required=False, in_table=False)
+        if f.key in anchos:
+            f = replace(f, width=anchos[f.key])
+        return f
+
+    return tuple(ajustar(f) for f in fields)
+
+
+REGULAR = _ajustar_linea(_linea(("telefono", "Teléfono de contacto", False), ("numero", "Nuevo número", True)),
+                         "numero", ocultos=("telefono", "documento", "descuento_id", "id_gestion"))
 COMPANIAS = ("PERSONAL", "MOVISTAR", "IMOWI")   # sugeridas: se puede escribir otra
 
-PORTA = tuple(replace(f, in_table=False) if f.key == "documento" else f for f in _linea(
-    ("numero_portar", "Número a portar", True), ("nim", "NIM temporal", True),
-    tras_a=(Field("compania_donante", "Compañía donante", kind="choice", required=True, options=COMPANIAS, width=110),
-            Field("tipo_negocio", "Tipo de negocio actual", kind="list", required=True,
-                  options=("PREPAGO", "POSPAGO"), width=100)),
-    tras_b=(Field("pin", "PIN de portabilidad", required=True, width=90),)))
+PORTA = _ajustar_linea(_linea(
+    ("numero_portar", "Número a portar", True), ("nim", "NIM temporal", False),
+    tras_a=(Field("compania_donante", "Compañía donante", kind="choice", options=COMPANIAS, width=110),
+            Field("tipo_negocio", "Tipo de negocio actual", kind="list", options=("PREPAGO", "POSPAGO"), width=100)),
+    tras_b=(Field("pin", "PIN de portabilidad", width=90),
+            Field("fecha_portacion", "Fecha de portación", kind="date", width=110, in_table=False))),
+    "numero_portar", ocultos=("documento", "compania_donante", "tipo_negocio", "descuento_id", "nim", "pin", "id_gestion"))
 
-# BAF (banda ancha fija = fibra óptica): venta e instalación, del titular al estado de la instalación.
+# BAF (banda ancha fija = fibra óptica): venta e instalación, del titular al estado de la instalación. El
+# formulario se agrupa en tres secciones (gestión, titular, servicio); la tabla (ver BAF.columns en
+# ui/screens/gestiones.py) muestra solo fecha, nombre, plan, estado, fecha pactada y fecha de instalación.
 ESTADOS_BAF = ("Deuda", "HP", "Falta pactar", "Pactada", "Cancelada", "Instalada")
 TIPOS_DOMICILIO = ("Casa", "Edificio", "Pasillo", "Empresa")
 
+SECCION_GESTION = "Datos de la gestión"
+SECCION_TITULAR = "Datos del titular"
+SECCION_SERVICIO = "Datos del servicio"
+
 BAF = (
-    Field("fecha", "Fecha de ingreso", kind="datetime", required=True, width=125),
-    Field("vendedor_id", "Vendedor", kind="select", required=True, width=100, ref="empleados"),
-    Field("nombre", "Titular", required=True, width=150),
-    Field("documento", "DNI / CUIT", width=100, digits=(7, 8, 11), in_table=False),
-    Field("fecha_nacimiento", "Fecha de nacimiento", kind="date", in_table=False),
-    Field("email", "Mail", in_table=False),
-    Field("telefono", "Teléfono", required=True, width=100, digits=10),
-    Field("telefono_alt", "Alternativo", digits=10, in_table=False),
-    Field("localidad", "Localidad", required=True, width=110, in_table=False),
-    Field("calle", "Calle", required=True, width=130, in_table=False),
-    Field("altura", "Altura", required=True, width=60, in_table=False),
-    Field("entre_calles", "Entre calles", in_table=False),
-    Field("torre_piso_depto", "Torre, piso y depto.", in_table=False),
-    Field("tipo_domicilio", "Tipo de domicilio", kind="list", required=True, options=TIPOS_DOMICILIO, in_table=False),
-    Field("plan_id", "Plan de internet", kind="select", width=90, ref="planes_baf"),
-    Field("cantidad_tv", "Cantidad de TV", kind="list", options=("N/A", "1", "2", "3"), width=50, in_table=False),
-    Field("fecha_pactada", "Fecha pactada", kind="date", width=90),
-    Field("franja", "Franja pactada", kind="list", options=("AM", "PM"), width=50, in_table=False),
-    Field("ot", "Código de OT", width=90),
-    Field("sds", "Código de SDS", width=90),
-    Field("fecha_instalacion", "Fecha de instalación", kind="date", width=110),
-    Field("estado", "Estado", kind="list", options=ESTADOS_BAF, width=90),
-    Field("con_form", "Cargado en el formulario", kind="bool"),
-    Field("observaciones", "Observaciones", width=150, stretch=True, in_table=False),
+    Field("fecha", "Fecha de ingreso", kind="datetime", required=True, width=125, section=SECCION_GESTION),
+    Field("vendedor_id", "Vendedor", kind="select", required=True, width=100, ref="empleados", in_table=False,
+          section=SECCION_GESTION),
+    Field("estado", "Estado", kind="list", options=ESTADOS_BAF, width=90, section=SECCION_GESTION),
+    Field("fecha_pactada", "Fecha pactada", kind="date", width=90, section=SECCION_GESTION),
+    Field("franja", "Franja pactada", kind="list", options=("AM", "PM"), width=50, in_table=False,
+          section=SECCION_GESTION),
+    Field("fecha_instalacion", "Fecha de instalación", kind="date", width=110, section=SECCION_GESTION),
+    Field("ot", "Código de OT", width=90, in_table=False, section=SECCION_GESTION),
+    Field("sds", "Código de SDS", width=90, in_table=False, section=SECCION_GESTION),
+    Field("con_form", "Cargado en el formulario", kind="bool", section=SECCION_GESTION),
+    Field("observaciones", "Observaciones", width=150, stretch=True, in_table=False, section=SECCION_GESTION),
+
+    Field("nombre", "Titular", required=True, width=150, section=SECCION_TITULAR),
+    Field("documento", "DNI / CUIT", width=100, digits=(7, 8, 11), in_table=False, section=SECCION_TITULAR),
+    Field("fecha_nacimiento", "Fecha de nacimiento", kind="date", in_table=False, section=SECCION_TITULAR),
+    Field("email", "Mail", in_table=False, section=SECCION_TITULAR),
+    Field("telefono", "Teléfono", required=True, width=100, digits=10, in_table=False, section=SECCION_TITULAR),
+    Field("telefono_alt", "Alternativo", digits=10, in_table=False, section=SECCION_TITULAR),
+
+    Field("localidad", "Localidad", required=True, width=110, in_table=False, section=SECCION_SERVICIO),
+    Field("calle", "Calle", required=True, width=130, in_table=False, section=SECCION_SERVICIO),
+    Field("altura", "Altura", required=True, width=60, in_table=False, section=SECCION_SERVICIO),
+    Field("entre_calles", "Entre calles", in_table=False, section=SECCION_SERVICIO),
+    Field("torre_piso_depto", "Torre, piso y depto.", in_table=False, section=SECCION_SERVICIO),
+    Field("tipo_domicilio", "Tipo de domicilio", kind="list", required=True, options=TIPOS_DOMICILIO, in_table=False,
+          section=SECCION_SERVICIO),
+    Field("plan_id", "Plan de internet", kind="select", width=90, ref="planes_baf", section=SECCION_SERVICIO),
+    Field("cantidad_tv", "Cantidad de TV", kind="list", options=("N/A", "1", "2", "3"), width=50, in_table=False,
+          section=SECCION_SERVICIO),
 )
 
 CATER = (
@@ -179,6 +217,13 @@ PLANES_BAF = (   # planes de fibra (200MB, 500MB...)
 DESCUENTOS = (
     Field("codigo", "Nombre clave", required=True, width=130),
     Field("descripcion", "Descripción", required=True, width=400, stretch=True),
+)
+
+# Días que el local no abre (feriados, balance...): los carga quien mantiene los datos, año a año.
+# Estadísticas los resta de la proyección del mes en curso.
+CIERRES = (
+    Field("fecha", "Fecha", kind="date", required=True, width=110),
+    Field("motivo", "Motivo", width=250, stretch=True),
 )
 
 SUCURSALES = (

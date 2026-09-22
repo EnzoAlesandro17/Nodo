@@ -1,6 +1,6 @@
 """Repositorios de Administración: sucursales, empleados y cuentas."""
 from db.repo import AMBIGUO, Repo, _like_escape
-from models import CUENTAS, DESCUENTOS, EMPLEADOS, PLANES, PLANES_BAF, SUCURSALES
+from models import CIERRES, CUENTAS, DESCUENTOS, EMPLEADOS, PLANES, PLANES_BAF, SUCURSALES
 
 
 class EmpleadoRepo(Repo):
@@ -90,3 +90,4 @@ empleados = EmpleadoRepo("empleados", EMPLEADOS, filter_key="rol")
 planes = Repo("planes", PLANES, filter_key="codigo", order="CAST(codigo AS INTEGER), codigo")   # 2GB antes que 10GB
 descuentos = Repo("descuentos", DESCUENTOS, filter_key="codigo")
 planes_baf = Repo("planes_baf", PLANES_BAF, filter_key="codigo", order="CAST(codigo AS INTEGER), codigo")
+cierres = Repo("cierres", CIERRES, filter_key="fecha", order="fecha")

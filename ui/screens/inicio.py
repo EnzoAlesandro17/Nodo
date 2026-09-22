@@ -26,7 +26,7 @@ class Inicio(Screen):
         _, _, _, neto_mes = caja.totales(del_mes)
         ops_dia = len(operaciones.operaciones(hoy_iso, hoy_iso, solo_vigentes=True))
         sims = connection.get().execute(
-            "SELECT COALESCE(sum(stock), 0) FROM accesorios WHERE activo = 1 AND categoria = 'SIMS' AND virtual = 0").fetchone()[0]
+            "SELECT COALESCE(sum(stock), 0) FROM equipos WHERE activo = 1 AND marca = 'SIM' AND virtual = 0").fetchone()[0]
 
         # --- números del día
         fila = ttk.Frame(card, style="Inner.TFrame")

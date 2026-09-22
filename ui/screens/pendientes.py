@@ -9,7 +9,8 @@ from ui.screens import administracion, gestiones, stock
 
 # categoría -> pantalla donde se corrige (se abre con el registro elegido y su formulario de edición)
 PANTALLAS = {"regular": gestiones.Regular, "porta": gestiones.Porta, "casim": gestiones.CaSIM,
-             "empleados": administracion.Empleados, "stock": stock.StockAccesorios, "equipos": stock.StockEquipos}
+             "cater": gestiones.CaTER, "empleados": administracion.Empleados, "stock": stock.StockAccesorios,
+             "equipos": stock.StockEquipos}
 
 
 class Pendientes(Screen):

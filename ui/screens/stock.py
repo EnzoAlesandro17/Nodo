@@ -35,7 +35,9 @@ class StockEquipos(StockScreen):
     def _update_buttons(self):
         super()._update_buttons()
         if hasattr(self, "btn_imeis"):
-            self.btn_imeis.config(state=self.btn_edit.cget("state"))
+            row_id = self._selected_id()
+            es_chip = row_id is not None and self.rows[row_id]["marca"] == "SIM"   # los chips no llevan IMEI
+            self.btn_imeis.config(state="disabled" if es_chip else self.btn_edit.cget("state"))
 
     def imeis(self):
         row_id = self._selected_id()

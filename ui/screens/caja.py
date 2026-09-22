@@ -1,20 +1,20 @@
 """Caja: resumen de los movimientos de plata (ventas, CaSIM, CaTER, intereses y gastos)."""
-import tkinter as tk
-from datetime import date
 from tkinter import ttk
+import tkinter as tk
 
 from db import caja
 from ui import theme
 from ui.autocomplete import Combobox
 from ui.base import Screen
-from ui.formatting import fmt_datetime, fmt_date, fmt_money, parse_date
+from ui.formatting import fmt_datetime, fmt_money
+from ui.period_filter import PeriodFilter
 
 TODOS = "TODOS"
 
 
 class Caja(Screen):
     title = "Caja"
-    subtitle = "Lo cobrado y lo gastado, por fecha, tipo, cuenta, vendedor y sucursal"
+    subtitle = "Lo cobrado y lo gastado, por período, tipo, cuenta, vendedor y sucursal"
 
     def __init__(self, parent):
         self.rows = []   # las filas del período (antes de filtrar por tipo, cuenta o sucursal)
@@ -26,28 +26,19 @@ class Caja(Screen):
         card.configure(padding=16)
         top = ttk.Frame(card, style="Inner.TFrame")
         top.pack(fill="x", pady=(0, 12))
-        hoy = date.today()
-        self.desde = tk.StringVar(value=fmt_date(hoy.replace(day=1).isoformat()))
-        self.hasta = tk.StringVar(value=fmt_date(hoy.isoformat()))
-        self.tipo, self.cuenta, self.sucursal = (tk.StringVar(value=TODOS) for _ in range(3))
+        self.periodo = PeriodFilter(top, self.refresh, modo_inicial="Mes")
+        self.periodo.frame.pack(side="left")
 
-        ttk.Label(top, text="Desde", style="Card.TLabel").pack(side="left")
-        for var in (self.desde, self.hasta):
-            entry = ttk.Entry(top, textvariable=var, width=11)
-            entry.pack(side="left", padx=(6, 0 if var is self.desde else 20))
-            entry.bind("<Return>", lambda e: self.refresh())
-            if var is self.desde:
-                ttk.Label(top, text="Hasta", style="Card.TLabel").pack(side="left", padx=(12, 0))
+        filtros = ttk.Frame(card, style="Inner.TFrame")
+        filtros.pack(fill="x", pady=(0, 12))
+        self.tipo, self.cuenta, self.sucursal = (tk.StringVar(value=TODOS) for _ in range(3))
         self.boxes = {}
         for text, var in (("Tipo", self.tipo), ("Cuenta", self.cuenta), ("Sucursal", self.sucursal)):
-            ttk.Label(top, text=text, style="Card.TLabel").pack(side="left")
-            box = Combobox(top, textvariable=var, state="readonly", width=17)
+            ttk.Label(filtros, text=text, style="Card.TLabel").pack(side="left")
+            box = Combobox(filtros, textvariable=var, state="readonly", width=17)
             box.pack(side="left", padx=(6, 16))
             box.bind("<<ComboboxSelected>>", lambda e: self._mostrar())
             self.boxes[text] = box
-        ttk.Button(top, text="Hoy", command=lambda: self._periodo(hoy, hoy)).pack(side="left")
-        ttk.Button(top, text="Este mes", command=lambda: self._periodo(hoy.replace(day=1), hoy)).pack(side="left", padx=6)
-        ttk.Button(top, text="Todo", command=lambda: self._periodo(None, None)).pack(side="left")
 
         columns = (("fecha", "Fecha", 130, "center"), ("tipo", "Tipo de movimiento", 150, "w"),
                    ("monto", "Monto", 120, "e"), ("cuenta", "Cuenta", 110, "center"),
@@ -73,28 +64,9 @@ class Caja(Screen):
         self.totales.pack(side="right")
 
     # --- datos ---------------------------------------------------------
-    def _periodo(self, desde, hasta):
-        self.desde.set(fmt_date(desde.isoformat()) if desde else "")
-        self.hasta.set(fmt_date(hasta.isoformat()) if hasta else "")
-        self.refresh()
-
-    def _fecha(self, var):
-        """La fecha escrita como "AAAA-MM-DD", "" si está vacía, o None si no es una fecha válida."""
-        texto = var.get().strip()
-        if not texto:
-            return ""
-        try:
-            return parse_date(texto)
-        except ValueError:
-            return None
-
     def refresh(self):
-        desde, hasta = self._fecha(self.desde), self._fecha(self.hasta)
-        if desde is None or hasta is None:
-            self.totales.config(text="Fechas: usá el formato dd/mm/aaaa (o dejá vacío para no limitar).",
-                                foreground=theme.DANGER)
-            return
-        self.rows = caja.movimientos(desde or None, hasta or None)
+        desde, hasta = self.periodo.rango()
+        self.rows = caja.movimientos(desde, hasta)
         for text, key in (("Tipo", "tipo"), ("Cuenta", "cuenta"), ("Sucursal", "sucursal")):
             values = [TODOS] + sorted({r[key] for r in self.rows if r[key]})
             self.boxes[text].configure(values=values)

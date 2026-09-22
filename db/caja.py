@@ -7,11 +7,13 @@ intereses que cobró el posnet (tipo INTERESES) quedan como filas aparte, no den
 Orígenes:
   VENTA ACCESORIOS  ventas de Nuevo > Accesorios (una fila por pago) y ventas sueltas de Stock > Movimientos
   VENTA EQUIPOS     ventas sueltas de Stock > Movimientos de equipos
-  CASIM / CATER     las gestiones (su movimiento de venta no se cuenta dos veces; el de la SIM de
-                    Regular y Porta tampoco: no cobran)
+  CASIM / CATER     las gestiones que cobran (su movimiento de venta no se cuenta dos veces)
+  REGULAR / PORTA / BAF   las gestiones que no cobran: aparecen igual, con monto 0, para que se vea todo lo
+                    gestionado en el día
   INTERESES         lo que el posnet cobró de más por las cuotas
   GASTO             Nuevo > Gasto
 """
+import calendar
 from datetime import date, timedelta
 
 from db import connection
@@ -34,12 +36,14 @@ _ORIGENES = (
     # ventas sueltas de Stock > Movimientos (no son de una venta con varios productos ni de una gestión)
     "SELECT m.fecha, 'VENTA ACCESORIOS', m.precio * m.cantidad, m.medio, e.nombre, s.codigo, m.cliente "
     "FROM mov_accesorios m " + _VENDEDOR_SUCURSAL.format(a="m") + "WHERE m.activo = 1 AND m.tipo = 'VENTA' "
-    "AND m.venta_id IS NULL AND m.id NOT IN (SELECT mov_id FROM casim WHERE mov_id IS NOT NULL) "
-    "AND m.id NOT IN (SELECT mov_id FROM regular WHERE mov_id IS NOT NULL) "
-    "AND m.id NOT IN (SELECT mov_id FROM porta WHERE mov_id IS NOT NULL)",
+    "AND m.venta_id IS NULL",
+    # las de CaTER, CaSIM, Regular y Porta (mov_equipos) ya se cuentan en su propia gestión, más abajo
     "SELECT m.fecha, 'VENTA EQUIPOS', m.precio * m.cantidad, m.medio, e.nombre, s.codigo, m.cliente "
     "FROM mov_equipos m " + _VENDEDOR_SUCURSAL.format(a="m") + "WHERE m.activo = 1 AND m.tipo = 'VENTA' "
-    "AND m.id NOT IN (SELECT mov_id FROM cater WHERE mov_id IS NOT NULL)",
+    "AND m.id NOT IN (SELECT mov_id FROM cater WHERE mov_id IS NOT NULL) "
+    "AND m.id NOT IN (SELECT mov_id FROM casim WHERE mov_id IS NOT NULL) "
+    "AND m.id NOT IN (SELECT mov_id FROM regular WHERE mov_id IS NOT NULL) "
+    "AND m.id NOT IN (SELECT mov_id FROM porta WHERE mov_id IS NOT NULL)",
     # gestiones que cobran
     "SELECT g.fecha, 'CASIM', g.monto, COALESCE(c.codigo, ''), e.nombre, s.codigo, g.nombre || ' ' || g.numero "
     "FROM casim g LEFT JOIN cuentas c ON c.id = g.cuenta_id " + _VENDEDOR_SUCURSAL.format(a="g") + "WHERE g.activo = 1",
@@ -49,6 +53,14 @@ _ORIGENES = (
     "SELECT g.fecha, 'CATER', g.monto, '', e.nombre, s.codigo, g.nombre || ' ' || g.numero "   # sin pagos cargados
     "FROM cater g " + _VENDEDOR_SUCURSAL.format(a="g") + "WHERE g.activo = 1 AND NOT EXISTS "
     "(SELECT 1 FROM pagos p WHERE p.origen = 'mov_equipos' AND p.mov_id = g.mov_id)",
+    # gestiones que no cobran (Regular, Porta y BAF): aparecen igual, con monto 0, para que se vea todo lo
+    # que se gestionó en el día, no solo lo que movió plata
+    "SELECT g.fecha, 'REGULAR', 0.0, '', e.nombre, s.codigo, g.nombre || ' ' || g.numero "
+    "FROM regular g " + _VENDEDOR_SUCURSAL.format(a="g") + "WHERE g.activo = 1",
+    "SELECT g.fecha, 'PORTA', 0.0, '', e.nombre, s.codigo, g.nombre || ' ' || g.numero_portar "
+    "FROM porta g " + _VENDEDOR_SUCURSAL.format(a="g") + "WHERE g.activo = 1",
+    "SELECT g.fecha, 'BAF', 0.0, '', COALESCE(e.nombre, ''), '', g.nombre || ' ' || g.telefono "   # BAF no tiene sucursal
+    "FROM baf g LEFT JOIN empleados e ON e.id = g.vendedor_id WHERE g.activo = 1",
     # gastos: salen de la caja
     "SELECT g.fecha, 'GASTO', -g.monto, COALESCE(c.codigo, ''), e.nombre, s.codigo, g.detalle "
     "FROM gastos g LEFT JOIN cuentas c ON c.id = g.cuenta_id " + _VENDEDOR_SUCURSAL.format(a="g") + "WHERE g.activo = 1",
@@ -80,3 +92,35 @@ def totales(rows):
     gastos = round(-sum(r["monto"] for r in rows if r["tipo"] == TIPO_GASTO), 2)
     ventas = round(sum(r["monto"] for r in rows if r["tipo"] not in (TIPO_INTERESES, TIPO_GASTO)), 2)
     return ventas, intereses, gastos, round(ventas - gastos, 2)
+
+
+def _info_mes(anio, mes):
+    """(día al que llegó ese mes, días que tiene, días cerrados cargados en Administración > Días cerrados).
+    Si `anio`/`mes` es el mes en curso, el día es el de hoy; si no, el mes entero ya pasó (o todavía no llegó)."""
+    hoy = date.today()
+    dias_mes = calendar.monthrange(anio, mes)[1]
+    dia = hoy.day if (anio, mes) == (hoy.year, hoy.month) else dias_mes
+    dias_cerrados = connection.get().execute(
+        "SELECT COUNT(*) FROM cierres WHERE activo = 1 AND strftime('%Y-%m', fecha) = ?",
+        (f"{anio}-{mes:02d}",)).fetchone()[0]
+    return dia, dias_mes, dias_cerrados
+
+
+def factor_proyeccion(anio=None, mes=None):
+    """Cuánto multiplicar lo que va de un mes para proyectarlo completo: (días del mes - cerrados) / día al
+    que llegó. Por defecto, el mes en curso."""
+    hoy = date.today()
+    dia, dias_mes, dias_cerrados = _info_mes(anio or hoy.year, mes or hoy.month)
+    return (dias_mes - dias_cerrados) / dia
+
+
+def proyeccion_mes_actual():
+    """Proyección de venta del mes en curso, para Estadísticas: (lo vendido en lo que va del mes / día del
+    mes) * (días del mes menos los días cerrados que estén cargados en Administración > Días cerrados).
+    {anio, mes, dia, dias_mes, dias_cerrados, ventas, proyectado}."""
+    hoy = date.today()
+    ventas, *_ = totales(movimientos(hoy.replace(day=1).isoformat(), hoy.isoformat()))
+    dia, dias_mes, dias_cerrados = _info_mes(hoy.year, hoy.month)
+    proyectado = round(ventas * factor_proyeccion(hoy.year, hoy.month), 2)
+    return {"anio": hoy.year, "mes": hoy.month, "dia": dia, "dias_mes": dias_mes,
+           "dias_cerrados": dias_cerrados, "ventas": ventas, "proyectado": proyectado}

@@ -11,6 +11,7 @@ from ui.autocomplete import Combobox
 from ui.base import Screen
 from ui.form_dialog import FormDialog
 from ui.formatting import fmt_date, fmt_datetime, fmt_int, fmt_money
+from ui.period_filter import PeriodFilter
 
 
 class TableScreen(Screen):
@@ -32,6 +33,11 @@ class TableScreen(Screen):
     @property
     def fields(self):
         return self.repo.fields
+
+    @property
+    def fecha_key(self):
+        """Campo de fecha principal (para el filtro por período), si la tabla tiene uno."""
+        return next((f.key for f in self.fields if f.key == "fecha" and f.kind in ("date", "datetime")), None)
 
     @property
     def columns(self):
@@ -57,6 +63,10 @@ class TableScreen(Screen):
         self.filter_box.pack(side="left", padx=8)
         self.filter_box.bind("<<ComboboxSelected>>", lambda e: self.refresh())
         ttk.Button(top, text="Limpiar filtros", command=self._clear_filters).pack(side="left", padx=(8, 0))
+
+        if self.fecha_key:
+            self.periodo = PeriodFilter(card, self.refresh)
+            self.periodo.frame.pack(fill="x", pady=(0, 12))
 
         wrap = ttk.Frame(card, style="Inner.TFrame")
         wrap.pack(fill="both", expand=True)
@@ -104,6 +114,12 @@ class TableScreen(Screen):
             self.filter_var.set(self.filter_all)
         fv = self.filter_var.get()
         rows = self.repo.list(self.search_var.get(), None if fv == self.filter_all else fv)
+        if self.fecha_key:
+            desde, hasta = self.periodo.rango()
+            if desde:
+                rows = [r for r in rows if r[self.fecha_key][:10] >= desde]
+            if hasta:
+                rows = [r for r in rows if r[self.fecha_key][:10] <= hasta]
         rows.sort(key=lambda r: self.sort_value(r, self.sort_key), reverse=self.sort_desc)
 
         keep = select if select is not None else self._selected_id()
@@ -154,6 +170,8 @@ class TableScreen(Screen):
     def _clear_filters(self):
         self.search_var.set("")
         self.filter_var.set(self.filter_all)
+        if self.fecha_key:
+            self.periodo.reset()
         self.refresh()
         self.search_entry.focus_set()
 

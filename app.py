@@ -51,6 +51,8 @@ MENU = {
         ("Planes", administracion.Planes),
         ("Planes BAF", administracion.PlanesBaf),
         ("Descuentos", administracion.Descuentos),
+        None,
+        ("Días cerrados", administracion.Cierres),
     ],
     "Data": [
         ("CSV y copia de seguridad", data.Data),
@@ -91,7 +93,7 @@ class App(tk.Tk):
         super().__init__()
         self.title("Nodo")
         self.minsize(800, 520)
-        w, h = 1200, 650
+        w, h = 1000, 650
         x = (self.winfo_screenwidth() - w) // 2
         y = (self.winfo_screenheight() - h) // 2
         self.geometry(f"{w}x{h}+{x}+{y}")

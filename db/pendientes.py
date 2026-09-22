@@ -41,6 +41,13 @@ def _casim():
                  "ORDER BY g.fecha DESC, g.id DESC")
 
 
+def _cater_sin_equipo():
+    return _rows("SELECT g.id, g.fecha, g.nombre, g.numero, COALESCE(e.nombre, '') AS vendedor, g.observaciones, "
+                 "'equipo' AS falta FROM cater g JOIN equipos q ON q.id = g.equipo_id "
+                 "LEFT JOIN empleados e ON e.id = g.vendedor_id WHERE g.activo = 1 AND q.codigo = 'PENDIENTE' "
+                 "ORDER BY g.fecha DESC, g.id DESC")
+
+
 def _empleados():
     return _rows("SELECT e.id, e.nombre, e.rol, e.celular, 'sucursal' AS falta FROM empleados e WHERE e.activo = 1 "
                  "AND NOT EXISTS (SELECT 1 FROM empleado_sucursal es JOIN sucursales s ON s.id = es.sucursal_id "
@@ -67,6 +74,9 @@ CATEGORIAS = (
      [_FECHA, ("nombre", "Nombre", 160), ("numero", "Número a portar", 110), ("plan", "Plan", 80), ("vendedor", "Vendedor", 150), _QUE_FALTA]),
     ("casim", "CaSIM con número mal", _casim,
      [_FECHA, ("nombre", "Nombre", 160), ("numero", "Número", 130), ("vendedor", "Vendedor", 150), _QUE_FALTA]),
+    ("cater", "CaTER sin equipo definido", _cater_sin_equipo,
+     [_FECHA, ("nombre", "Nombre", 160), ("numero", "Número", 130), ("vendedor", "Vendedor", 150),
+      ("observaciones", "Pago", 220), _QUE_FALTA]),
     ("empleados", "Empleados sin sucursal", _empleados,
      [("nombre", "Nombre", 220), ("rol", "Cargo", 130), ("celular", "Teléfono", 120), _QUE_FALTA]),
     ("stock", "Accesorios con stock negativo", _stock_negativo,

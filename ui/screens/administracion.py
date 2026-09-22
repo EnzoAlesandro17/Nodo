@@ -3,6 +3,7 @@ import re
 
 from db import administracion as repos
 from ui.codigo_base import CodigoScreen
+from ui.formatting import fmt_date
 from ui.table_base import TableScreen
 
 
@@ -70,3 +71,30 @@ class Descuentos(CodigoScreen):
     repo = repos.descuentos
     noun, noun_plural = "descuento", "descuentos"
     form_new, form_edit = "Nuevo descuento", "Editar descuento"
+
+
+class Cierres(TableScreen):
+    title = "Administración · Días cerrados"
+    subtitle = "Feriados y otros días que el local no abre: se cargan año a año, y Estadísticas los usa para la proyección del mes"
+    repo = repos.cierres
+    noun, noun_plural = "día cerrado", "días cerrados"
+    form_new, form_edit = "Nuevo día cerrado", "Editar día cerrado"
+    default_sort, default_desc = "fecha", False
+    left_keys = ("motivo",)
+
+    def _repetido(self, fecha, row_id=None):
+        return next((r for r in self.repo.list() if r["fecha"] == fecha and r["id"] != row_id), None)
+
+    def _save_new(self, data, dialog):
+        if self._repetido(data["fecha"]):
+            return f"Ya hay un día cerrado cargado para el {fmt_date(data['fecha'])}."
+        self.reload(select=self.repo.insert(data))
+
+    def _save_edit(self, row_id, data):
+        if self._repetido(data["fecha"], row_id):
+            return f"Ya hay un día cerrado cargado para el {fmt_date(data['fecha'])}."
+        self.repo.update(row_id, data)
+        self.reload(select=row_id)
+
+    def delete_prompt(self, row):
+        return ("Quitar de la lista", f"¿Querés quitar el {fmt_date(row['fecha'])} de los días cerrados?")

@@ -67,7 +67,7 @@ class GestionScreen(TableScreen):
 class GestionVentaScreen(GestionScreen):
     """Gestión que vende un producto del stock (repo: db.gestiones.GestionVentaRepo)."""
 
-    sim_default = ""   # código del accesorio que se propone como Tipo de SIM (Regular y Porta), si la gestión lo tiene
+    sim_default = ""   # código del equipo (marca SIM) que se propone como Tipo de SIM (Regular y Porta), si la gestión lo tiene
 
     def _defaults(self):
         """Sucursal y vendedor de la última gestión (y su SIM, si la gestión la pide), para no elegirlos cada vez."""
@@ -75,7 +75,7 @@ class GestionVentaScreen(GestionScreen):
         keys = ("sucursal_id", "vendedor_id") + (("sim_id",) if self.sim_default else ())
         defaults = {k: last[0][k] for k in keys if last and last[0].get(k) is not None}
         if self.sim_default and "sim_id" not in defaults:
-            sim = stock.accesorios.get_by_codigo(self.sim_default)
+            sim = stock.equipos.get_by_codigo(self.sim_default)
             if sim and sim["activo"]:
                 defaults["sim_id"] = sim["id"]
         return defaults
