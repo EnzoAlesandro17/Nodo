@@ -192,8 +192,11 @@ CATER = (
 )
 
 # Nuevo > Gasto: plata que sale (se resta en la caja)
+RUBROS_GASTO = ("ALQUILER", "AUTOMOTOR", "BANCARIOS", "COMISION", "FLETE", "SERVICIOS", "LIBRERÍA", "LIMPIEZA",
+                "PUBLICIDAD", "SUELDOS", "VARIOS", "VIATICOS")   # los de la hoja Gastos de la planilla de caja
 GASTOS = (
     Field("fecha", "Fecha y hora", kind="datetime", required=True, width=130),
+    Field("rubro", "Rubro", kind="list", options=RUBROS_GASTO, required=True, default="VARIOS", width=100),
     Field("detalle", "Detalle", required=True, width=180, stretch=True),
     Field("factura", "Factura", width=100),
     Field("monto", "Monto", kind="money", required=True, width=100),
@@ -221,6 +224,17 @@ DESCUENTOS = (
 
 # Días que el local no abre (feriados, balance...): los carga quien mantiene los datos, año a año.
 # Estadísticas los resta de la proyección del mes en curso.
+# Administración > Tareas (traídas de MyTools): pendientes del local, abiertas o cerradas
+ESTADOS_TAREA = ("Abierta", "Cerrada")
+TAREAS = (
+    Field("fecha", "Creada", kind="datetime", required=True, width=125),
+    Field("titulo", "Tarea", required=True, width=300, stretch=True),
+    Field("fecha_limite", "Fecha límite", kind="date", width=100),
+    Field("prioritaria", "Prioritaria", kind="bool"),
+    Field("estado", "Estado", kind="list", options=ESTADOS_TAREA, required=True, default="Abierta", width=80),
+    Field("comentarios", "Comentarios", width=200, in_table=False),
+)
+
 CIERRES = (
     Field("fecha", "Fecha", kind="date", required=True, width=110),
     Field("motivo", "Motivo", width=250, stretch=True),

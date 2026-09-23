@@ -62,7 +62,8 @@ def similar(a, b):
 
 # --- lectura -----------------------------------------------------------
 def _read_rows(path):
-    raw = open(path, "rb").read()
+    with open(path, "rb") as fh:
+        raw = fh.read()
     for enc in ("utf-8-sig", "cp1252"):
         try:
             text = raw.decode(enc)

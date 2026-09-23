@@ -104,6 +104,7 @@ CREATE TABLE IF NOT EXISTS ventas (
 CREATE TABLE IF NOT EXISTS gastos (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     fecha         TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
+    rubro         TEXT    NOT NULL DEFAULT 'VARIOS',            -- models.RUBROS_GASTO
     detalle       TEXT    NOT NULL,
     factura       TEXT    NOT NULL DEFAULT '',
     monto         REAL    NOT NULL DEFAULT 0,          -- siempre positivo: la caja lo muestra restando
@@ -291,6 +292,19 @@ CREATE TABLE IF NOT EXISTS cierres (
     motivo TEXT    NOT NULL DEFAULT '',
     activo INTEGER NOT NULL DEFAULT 1
 );
+
+-- Tareas del local (Administración > Tareas, traídas de MyTools). `cerrada`: cuándo pasó a Cerrada (la pone el repo).
+CREATE TABLE IF NOT EXISTS tareas (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha        TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
+    titulo       TEXT    NOT NULL,
+    fecha_limite TEXT    NOT NULL DEFAULT '',                -- AAAA-MM-DD o vacío
+    prioritaria  INTEGER NOT NULL DEFAULT 0,
+    estado       TEXT    NOT NULL DEFAULT 'Abierta',         -- Abierta | Cerrada
+    comentarios  TEXT    NOT NULL DEFAULT '',
+    cerrada      TEXT    NOT NULL DEFAULT '',
+    activo       INTEGER NOT NULL DEFAULT 1
+);
 """
 
 # Movimientos de stock: una tabla por tipo de producto, con el mismo formato.
@@ -323,7 +337,7 @@ SCHEMA += IMEIS_DDL
 # `origen` es la tabla del movimiento (mov_accesorios / mov_equipos) o 'ventas', y `mov_id` su id.
 # `monto` es la parte de la venta que cubre el pago; `interes`, lo que el posnet cobró de más por las cuotas
 # (lo calcula el posnet: se carga aparte para que la caja lo diferencie de la venta).
-SCHEMA += """
+PAGOS_DDL = """
 CREATE TABLE IF NOT EXISTS pagos (
     id     INTEGER PRIMARY KEY AUTOINCREMENT,
     origen TEXT    NOT NULL,
@@ -334,6 +348,7 @@ CREATE TABLE IF NOT EXISTS pagos (
 );
 CREATE INDEX IF NOT EXISTS pagos_mov ON pagos (origen, mov_id);
 """
+SCHEMA += PAGOS_DDL
 
 _conn = None
 
@@ -522,9 +537,33 @@ def _m7_chips_a_equipos(conn):
                 list(equivalencia))
 
 
+def _m8_gastos_rubro(conn):
+    """Los gastos llevan rubro (ALQUILER, SUELDOS, VARIOS...), como en la hoja Gastos de la planilla de caja."""
+    if "rubro" not in _columnas(conn, "gastos"):
+        conn.execute("ALTER TABLE gastos ADD COLUMN rubro TEXT NOT NULL DEFAULT 'VARIOS'")
+
+
+def _m9_pagos_con_cuenta_obligatoria(conn):
+    """La cuenta de un pago pasa a ser obligatoria (las bases migradas desde el medio de texto la tenían opcional, y
+    un pago sin cuenta no aparece en la Caja). SQLite no cambia un NOT NULL: se reconstruye la tabla con PAGOS_DDL."""
+    if next(r["notnull"] for r in conn.execute("PRAGMA table_info(pagos)") if r["name"] == "cuenta_id"):
+        return
+    if conn.execute("SELECT 1 FROM pagos WHERE cuenta_id IS NULL").fetchone():
+        raise RuntimeError("Hay pagos sin cuenta: asignales una antes de actualizar.")
+    conn.execute("ALTER TABLE pagos RENAME TO pagos_viejo")
+    conn.execute("DROP INDEX IF EXISTS pagos_mov")
+    for sentencia in PAGOS_DDL.split(";"):
+        if sentencia.strip():
+            conn.execute(sentencia)
+    conn.execute("INSERT INTO pagos (id, origen, mov_id, cuenta_id, monto, interes) "
+                 "SELECT id, origen, mov_id, cuenta_id, monto, interes FROM pagos_viejo")
+    conn.execute("DROP TABLE pagos_viejo")
+
+
 MIGRACIONES = [_m1_bases_anteriores_al_control_de_version, _m2_pagos_de_ventas_dadas_de_baja,
                _m3_ventas_con_varios_productos_e_intereses, _m4_regular_y_porta_descuentan_sim,
-               _m5_empleados_mail_y_nacimiento, _m6_porta_fecha_portacion, _m7_chips_a_equipos]
+               _m5_empleados_mail_y_nacimiento, _m6_porta_fecha_portacion, _m7_chips_a_equipos,
+               _m8_gastos_rubro, _m9_pagos_con_cuenta_obligatoria]
 
 
 def _migrar(conn):

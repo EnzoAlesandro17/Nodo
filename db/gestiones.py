@@ -1,7 +1,7 @@
 """Repositorios de las gestiones (tablas de trámites con fecha, cliente y demás)."""
 from db import refs
 from db.repo import Repo, _like_escape
-from models import BAF, CASIM, CATER, GASTOS, PORTA, REGULAR
+from models import BAF, CASIM, CATER, GASTOS, PORTA, REGULAR, TAREAS
 
 
 class GestionRepo(Repo):
@@ -153,3 +153,20 @@ regular = GestionVentaRepo("regular", REGULAR, "vendedor_id", "sim_id", "mov_equ
 porta = GestionVentaRepo("porta", PORTA, "vendedor_id", "sim_id", "mov_equipos", "PORTA", numero_key="numero_portar")
 baf = GestionRepo("baf", BAF, filter_key="estado")
 gastos = GestionRepo("gastos", GASTOS, filter_key="vendedor_id")
+
+
+class TareaRepo(GestionRepo):
+    """Tareas: al pasar a Cerrada guarda cuándo (`cerrada`); al reabrirla lo borra."""
+
+    def _update_row(self, row_id, data):
+        super()._update_row(row_id, data)
+        self._db.execute("UPDATE tareas SET cerrada = CASE WHEN estado <> 'Cerrada' THEN '' "
+                         "WHEN cerrada = '' THEN datetime('now', 'localtime') ELSE cerrada END WHERE id = ?", (row_id,))
+
+    def _insert_row(self, data):
+        row_id = super()._insert_row(data)
+        self._update_row(row_id, data)
+        return row_id
+
+
+tareas = TareaRepo("tareas", TAREAS, filter_key="estado")

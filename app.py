@@ -4,7 +4,7 @@ from tkinter import ttk
 
 from ui import theme
 from ui.screens import (administracion, arqueo, caja, consultas, cuentas, data, estadisticas, gastos, gestiones,
-                        ingreso_equipos, inicio, movimientos, nuevo, pendientes, stock, venta_accesorios)
+                        ingreso_equipos, inicio, movimientos, nuevo, pendientes, stock, tareas, venta_accesorios)
 
 # Estructura del menú, en orden: primero lo que se usa todos los días (cargar, consultar, stock, caja) y al final lo que
 # se toca de vez en cuando (administración y data). Cada valor es una lista de opciones.
@@ -53,6 +53,7 @@ MENU = {
         ("Descuentos", administracion.Descuentos),
         None,
         ("Días cerrados", administracion.Cierres),
+        ("Tareas", tareas.Tareas),
     ],
     "Data": [
         ("CSV y copia de seguridad", data.Data),
