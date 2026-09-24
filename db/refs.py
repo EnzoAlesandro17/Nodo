@@ -5,11 +5,11 @@ LABEL_FIELDS = {
     "accesorios": ("codigo", "descripcion"),
     "equipos": ("codigo", "descripcion"),
     "cuentas": ("codigo", "descripcion"),
+    "areas": ("codigo", "nombre"),
     "sucursales": ("codigo", "nombre"),
     "empleados": ("nombre",),
     "planes": ("codigo", "descripcion"),
     "descuentos": ("codigo", "descripcion"),
-    "planes_baf": ("codigo", "descripcion"),
 }
 
 
@@ -20,9 +20,8 @@ PRICE_FIELD = {"equipos": "precio"}
 def _repo(ref):
     from db import administracion, stock   # acá para evitar importaciones circulares
     return {"accesorios": stock.accesorios, "equipos": stock.equipos, "cuentas": administracion.cuentas,
-            "sucursales": administracion.sucursales, "empleados": administracion.empleados,
-            "planes": administracion.planes, "descuentos": administracion.descuentos,
-            "planes_baf": administracion.planes_baf}[ref]
+            "areas": administracion.areas, "sucursales": administracion.sucursales, "empleados": administracion.empleados,
+            "planes": administracion.planes, "descuentos": administracion.descuentos}[ref]
 
 
 def codigos(ref):

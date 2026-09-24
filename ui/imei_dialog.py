@@ -7,6 +7,7 @@ from tkinter import messagebox, ttk
 from db import imeis, refs
 from ui import theme
 from ui.autocomplete import Combobox
+from ui.base import arriba
 from ui.formatting import fmt_date, parse_date
 
 DIAS_PENALIZACION = 60   # a partir de acá la unidad se marca en rojo (regla de Claro: evitar penalizar a los 60 días)
@@ -73,7 +74,7 @@ class ImeiDialog(tk.Toplevel):
         ttk.Button(bar, text="Cerrar", command=self.destroy).pack(side="right")
         self.resumen = ttk.Label(bar, style="Sub.TLabel")
         self.resumen.pack(side="right", padx=(0, 16))
-        ttk.Label(self, text="Cargar un IMEI no cambia el stock: el stock se mueve en Stock > Movimientos. "
+        ttk.Label(self, text="Cargar un IMEI no cambia el stock: el stock se mueve en sus Movimientos. "
                              f"En rojo, los de {DIAS_PENALIZACION} días o más.", style="Sub.TLabel",
                   padding=(24, 0, 24, 14)).pack(anchor="w")
 
@@ -82,10 +83,7 @@ class ImeiDialog(tk.Toplevel):
             self.sucursal.set(next((label for label, i in self.sucursales.items() if i == default[-1]["sucursal_id"]), ""))
         self._reload()
         self.bind("<Escape>", lambda e: self.destroy())
-        self.update_idletasks()
-        x = parent.winfo_rootx() + (parent.winfo_width() - self.winfo_width()) // 2
-        y = parent.winfo_rooty() + (parent.winfo_height() - self.winfo_height()) // 3
-        self.geometry(f"+{max(x, 0)}+{max(y, 0)}")
+        arriba(self, parent)
         self.wait_visibility()
         self.grab_set()
         self.entry.focus_set()

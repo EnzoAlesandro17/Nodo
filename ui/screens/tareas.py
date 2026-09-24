@@ -1,4 +1,4 @@
-"""Administración > Tareas: pendientes del local (traídas de MyTools)."""
+"""Administrar > Tareas: pendientes del local (traídas de MyTools)."""
 from datetime import date
 
 from db import gestiones as repos
@@ -6,7 +6,7 @@ from ui.gestion_base import GestionScreen
 
 
 class Tareas(GestionScreen):
-    title = "Administración · Tareas"
+    title = "Administrar · Tareas"
     subtitle = "Pendientes del local: en rojo las abiertas prioritarias o con la fecha límite vencida"
     repo = repos.tareas
     noun, noun_plural = "tarea", "tareas"

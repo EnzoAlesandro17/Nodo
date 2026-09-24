@@ -14,6 +14,9 @@ BORDER = "#e5e7eb"
 DANGER = "#dc2626"
 OK = "#15803d"          # verde: sobra, bien
 ZEBRA = "#f9fafb"
+FILA_OK = "#dcfce7"      # fondos de fila por estado: verde (hecho), rojo (cancelado), amarillo (en curso)
+FILA_MAL = "#fee2e2"
+FILA_PENDIENTE = "#fef9c3"
 
 FONT = ("Segoe UI", 10)
 FONT_BOLD = ("Segoe UI", 10, "bold")

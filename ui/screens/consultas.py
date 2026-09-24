@@ -1,13 +1,13 @@
 """Consultas > Ventas y gestiones: buscar cualquier venta, gestión o gasto cargado, y anularlo."""
 import tkinter as tk
-from datetime import date
 from tkinter import messagebox, ttk
 
 from db import operaciones
 from ui import theme
 from ui.autocomplete import Combobox, normalizar
 from ui.base import Screen
-from ui.formatting import fmt_date, fmt_datetime, fmt_money, parse_date
+from ui.formatting import fmt_datetime, fmt_money
+from ui.period_filter import PeriodFilter
 
 TODOS = "TODOS"
 NOMBRES = {"ACCESORIOS": "Accesorios", "EQUIPOS": "Equipos", "CASIM": "CaSIM", "CATER": "CaTER", "REGULAR": "Regular",
@@ -30,26 +30,17 @@ class Consultas(Screen):
         card.configure(padding=16)
         top = ttk.Frame(card, style="Inner.TFrame")
         top.pack(fill="x", pady=(0, 12))
-        hoy = date.today()
         self.buscar, self.tipo = tk.StringVar(), tk.StringVar(value=TODOS)
-        self.desde = tk.StringVar(value=fmt_date(hoy.replace(day=1).isoformat()))
-        self.hasta = tk.StringVar(value=fmt_date(hoy.isoformat()))
         ttk.Label(top, text="Buscar", style="Card.TLabel").pack(side="left")
-        self.entry = ttk.Entry(top, textvariable=self.buscar, width=30)
+        self.entry = ttk.Entry(top, textvariable=self.buscar, width=20)
         self.entry.pack(side="left", padx=(6, 18))
         self.buscar.trace_add("write", lambda *_: self._mostrar())
         ttk.Label(top, text="Tipo", style="Card.TLabel").pack(side="left")
         box = Combobox(top, textvariable=self.tipo, values=[TODOS] + TIPOS, state="readonly", width=12)
         box.pack(side="left", padx=(6, 18))
         box.bind("<<ComboboxSelected>>", lambda e: self._mostrar())
-        for texto, var in (("Desde", self.desde), ("Hasta", self.hasta)):
-            ttk.Label(top, text=texto, style="Card.TLabel").pack(side="left")
-            e = ttk.Entry(top, textvariable=var, width=11)
-            e.pack(side="left", padx=(6, 12))
-            e.bind("<Return>", lambda ev: self.cargar())
-        ttk.Button(top, text="Hoy", command=lambda: self._periodo(hoy, hoy)).pack(side="left")
-        ttk.Button(top, text="Este mes", command=lambda: self._periodo(hoy.replace(day=1), hoy)).pack(side="left", padx=6)
-        ttk.Button(top, text="Todo", command=lambda: self._periodo(None, None)).pack(side="left")
+        self.periodo = PeriodFilter(top, self.cargar, modo_inicial="Mes")
+        self.periodo.frame.pack(side="right")
 
         columnas = (("fecha", "Fecha y hora", 125, "center"), ("tipo", "Tipo", 90, "center"), ("cliente", "Cliente", 170, "w"),
                     ("detalle", "Detalle", 300, "w"), ("monto", "Monto", 110, "e"), ("vendedor", "Vendedor", 140, "w"),
@@ -80,34 +71,19 @@ class Consultas(Screen):
         self._botones()
 
     # --- datos ---------------------------------------------------------
-    def _periodo(self, desde, hasta):
-        self.desde.set(fmt_date(desde.isoformat()) if desde else "")
-        self.hasta.set(fmt_date(hasta.isoformat()) if hasta else "")
-        self.cargar()
-
-    def _fecha(self, var):
-        texto = var.get().strip()
-        if not texto:
-            return ""
-        try:
-            return parse_date(texto)
-        except ValueError:
-            return None
-
     def cargar(self):
-        desde, hasta = self._fecha(self.desde), self._fecha(self.hasta)
-        if desde is None or hasta is None:
-            self.total.config(text="Fechas: usá el formato dd/mm/aaaa (o dejá vacío para no limitar).", foreground=theme.DANGER)
-            return
-        self.filas = operaciones.operaciones(desde or None, hasta or None, con_gastos=True)
+        desde, hasta = self.periodo.rango()
+        self.filas = operaciones.operaciones(desde, hasta, con_gastos=True)
+        for o in self.filas:   # Buscar encuentra cualquier dato de la fila, tal como se ve
+            o["_texto"] = normalizar(" ".join((fmt_datetime(o["fecha"]), NOMBRES[o["tipo"]], o["cliente"], o["detalle"],
+                                               self._monto(o), str(o["monto"]), o["vendedor"], o["sucursal"])))
         self._mostrar()
 
     def _mostrar(self):
         palabras = normalizar(self.buscar.get()).split()
         tipo = None if self.tipo.get() in ("", TODOS) else POR_NOMBRE[self.tipo.get()]
         seleccionada = self.tree.selection()
-        filas = [o for o in self.filas if (tipo is None or o["tipo"] == tipo) and all(
-            p in normalizar(" ".join((o["cliente"], o["detalle"], o["vendedor"], o["sucursal"], NOMBRES[o["tipo"]]))) for p in palabras)]
+        filas = [o for o in self.filas if (tipo is None or o["tipo"] == tipo) and all(p in o["_texto"] for p in palabras)]
         self.visibles = {f"{o['origen']}:{o['id']}": o for o in filas}
         self.tree.delete(*self.tree.get_children())
         for n, o in enumerate(filas[:2000]):   # con miles de filas alcanza con las más recientes; se acota con la fecha

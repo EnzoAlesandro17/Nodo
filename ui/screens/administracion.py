@@ -1,15 +1,37 @@
-"""Pantallas del menú Administración."""
+"""Pantallas del menú Administrar."""
 import re
 
-from db import administracion as repos
+from db import administracion as repos, refs
 from ui.codigo_base import CodigoScreen
-from ui.formatting import fmt_date
 from ui.table_base import TableScreen
 
 
+class Areas(CodigoScreen):
+    title = "Administrar · Áreas"
+    subtitle = "Áreas que agrupan las sucursales: cada sucursal pertenece a un área"
+    repo = repos.areas
+    noun, noun_plural = "área", "áreas"
+    form_new, form_edit = "Nueva área", "Editar área"
+    fem = True
+    label_key = "nombre"
+    left_keys = ("nombre",)
+
+    @property
+    def _g(self):
+        return super()._g | {"un": "un"}   # «un área», como «el área», aunque sea femenino
+
+    def delete_prompt(self, row):
+        title, message = super().delete_prompt(row)
+        n = repos.sucursales.contar_por_area(row["id"])
+        if n:
+            message += (f"\n\nTiene {n} sucursal{'' if n == 1 else 'es'} activa{'' if n == 1 else 's'}: "
+                        f"sigue{'' if n == 1 else 'n'} en esta área hasta que le{'' if n == 1 else 's'} asignes otra.")
+        return title, message
+
+
 class Sucursales(CodigoScreen):
-    title = "Administración · Sucursales"
-    subtitle = "Alta y edición de sucursales"
+    title = "Administrar · Sucursales"
+    subtitle = "Alta y edición de sucursales, cada una dentro de un área"
     repo = repos.sucursales
     noun, noun_plural = "sucursal", "sucursales"
     form_new, form_edit = "Nueva sucursal", "Editar sucursal"
@@ -18,9 +40,14 @@ class Sucursales(CodigoScreen):
     default_sort = "codigo"
     left_keys = ("nombre",)
 
+    def _choices(self):
+        choices = super()._choices()
+        choices["area_id"] = refs.choices("areas")
+        return choices
+
 
 class Empleados(TableScreen):
-    title = "Administración · Empleados"
+    title = "Administrar · Empleados"
     subtitle = "Alta y edición de empleados, asignados a una o varias sucursales"
     repo = repos.empleados
     noun, noun_plural = "empleado", "empleados"
@@ -47,8 +74,8 @@ class Empleados(TableScreen):
 
 
 class Planes(CodigoScreen):
-    title = "Administración · Planes"
-    subtitle = "Planes vigentes que se ofrecen en las gestiones"
+    title = "Administrar · Planes"
+    subtitle = "Planes vigentes que se ofrecen en las gestiones: los de LÍNEAS en Regular y Porta, los de BAF en BAF"
     repo = repos.planes
     noun, noun_plural = "plan", "planes"
     form_new, form_edit = "Nuevo plan", "Editar plan"
@@ -59,42 +86,10 @@ class Planes(CodigoScreen):
         return super().sort_value(row, key)
 
 
-class PlanesBaf(Planes):
-    title = "Administración · Planes BAF"
-    subtitle = "Planes de fibra vigentes que se ofrecen en BAF"
-    repo = repos.planes_baf
-
-
 class Descuentos(CodigoScreen):
-    title = "Administración · Descuentos"
+    title = "Administrar · Descuentos"
     subtitle = "Descuentos que se ofrecen en las gestiones"
     repo = repos.descuentos
     noun, noun_plural = "descuento", "descuentos"
     form_new, form_edit = "Nuevo descuento", "Editar descuento"
 
-
-class Cierres(TableScreen):
-    title = "Administración · Días cerrados"
-    subtitle = "Feriados y otros días que el local no abre: se cargan año a año, y Estadísticas los usa para la proyección del mes"
-    repo = repos.cierres
-    noun, noun_plural = "día cerrado", "días cerrados"
-    form_new, form_edit = "Nuevo día cerrado", "Editar día cerrado"
-    default_sort, default_desc = "fecha", False
-    left_keys = ("motivo",)
-
-    def _repetido(self, fecha, row_id=None):
-        return next((r for r in self.repo.list() if r["fecha"] == fecha and r["id"] != row_id), None)
-
-    def _save_new(self, data, dialog):
-        if self._repetido(data["fecha"]):
-            return f"Ya hay un día cerrado cargado para el {fmt_date(data['fecha'])}."
-        self.reload(select=self.repo.insert(data))
-
-    def _save_edit(self, row_id, data):
-        if self._repetido(data["fecha"], row_id):
-            return f"Ya hay un día cerrado cargado para el {fmt_date(data['fecha'])}."
-        self.repo.update(row_id, data)
-        self.reload(select=row_id)
-
-    def delete_prompt(self, row):
-        return ("Quitar de la lista", f"¿Querés quitar el {fmt_date(row['fecha'])} de los días cerrados?")

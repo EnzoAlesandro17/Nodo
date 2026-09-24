@@ -95,32 +95,28 @@ def totales(rows):
 
 
 def _info_mes(anio, mes):
-    """(día al que llegó ese mes, días que tiene, días cerrados cargados en Administración > Días cerrados).
-    Si `anio`/`mes` es el mes en curso, el día es el de hoy; si no, el mes entero ya pasó (o todavía no llegó)."""
+    """(día al que llegó ese mes, días que tiene). Si `anio`/`mes` es el mes en curso, el día es el de hoy; si no,
+    el mes entero ya pasó (o todavía no llegó)."""
     hoy = date.today()
     dias_mes = calendar.monthrange(anio, mes)[1]
     dia = hoy.day if (anio, mes) == (hoy.year, hoy.month) else dias_mes
-    dias_cerrados = connection.get().execute(
-        "SELECT COUNT(*) FROM cierres WHERE activo = 1 AND strftime('%Y-%m', fecha) = ?",
-        (f"{anio}-{mes:02d}",)).fetchone()[0]
-    return dia, dias_mes, dias_cerrados
+    return dia, dias_mes
 
 
 def factor_proyeccion(anio=None, mes=None):
-    """Cuánto multiplicar lo que va de un mes para proyectarlo completo: (días del mes - cerrados) / día al
-    que llegó. Por defecto, el mes en curso."""
+    """Cuánto multiplicar lo que va de un mes para proyectarlo completo: días del mes / día al que llegó.
+    Por defecto, el mes en curso."""
     hoy = date.today()
-    dia, dias_mes, dias_cerrados = _info_mes(anio or hoy.year, mes or hoy.month)
-    return (dias_mes - dias_cerrados) / dia
+    dia, dias_mes = _info_mes(anio or hoy.year, mes or hoy.month)
+    return dias_mes / dia
 
 
 def proyeccion_mes_actual():
     """Proyección de venta del mes en curso, para Estadísticas: (lo vendido en lo que va del mes / día del
-    mes) * (días del mes menos los días cerrados que estén cargados en Administración > Días cerrados).
-    {anio, mes, dia, dias_mes, dias_cerrados, ventas, proyectado}."""
+    mes) * días del mes. {anio, mes, dia, dias_mes, ventas, proyectado}."""
     hoy = date.today()
     ventas, *_ = totales(movimientos(hoy.replace(day=1).isoformat(), hoy.isoformat()))
-    dia, dias_mes, dias_cerrados = _info_mes(hoy.year, hoy.month)
+    dia, dias_mes = _info_mes(hoy.year, hoy.month)
     proyectado = round(ventas * factor_proyeccion(hoy.year, hoy.month), 2)
-    return {"anio": hoy.year, "mes": hoy.month, "dia": dia, "dias_mes": dias_mes,
-           "dias_cerrados": dias_cerrados, "ventas": ventas, "proyectado": proyectado}
+    return {"anio": hoy.year, "mes": hoy.month, "dia": dia, "dias_mes": dias_mes, "ventas": ventas,
+            "proyectado": proyectado}

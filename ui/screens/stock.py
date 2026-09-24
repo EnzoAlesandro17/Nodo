@@ -1,8 +1,9 @@
-"""Pantallas del menú Stock."""
+"""Pantallas del menú Administrar > Stock. Cada una tiene un botón Movimientos que abre los de su tipo de producto."""
 from tkinter import ttk
 
 from db import stock as repos
 from ui.imei_dialog import DIAS_PENALIZACION, ImeiDialog
+from ui.screens import movimientos
 from ui.stock_base import StockScreen
 
 
@@ -11,6 +12,7 @@ class StockAccesorios(StockScreen):
     subtitle = "Inventario de accesorios"
     repo = repos.accesorios
     filter_all = "TODAS"
+    movimientos = movimientos.MovAccesorios
 
 
 class StockEquipos(StockScreen):
@@ -18,11 +20,13 @@ class StockEquipos(StockScreen):
     subtitle = "Inventario de equipos"
     repo = repos.equipos
     filter_all = "TODAS"
+    movimientos = movimientos.MovEquipos
 
     def extra_actions(self, bar):
         """Sin importar / exportar CSV (eso se hace desde Data); con los IMEI del modelo."""
         self.btn_imeis = ttk.Button(bar, text="IMEI", command=self.imeis)
         self.btn_imeis.pack(side="left", padx=(16, 0))
+        super().extra_actions(bar)
 
     def row_tags(self, row):   # con una unidad de 60 días o más, la fila va en rojo
         return ("viejo",) if row.get("dias", 0) >= DIAS_PENALIZACION else ()

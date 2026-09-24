@@ -94,17 +94,27 @@ class Plan:
         self.tiene_descripcion = "descripcion" in by_key
 
 
-def _parse_cell(field, cell, sucursales):
+_NOMBRE_REF = {"sucursales": "la sucursal", "areas": "el área"}   # para los avisos de un código que no existe
+
+
+def _parse_cell(field, cell, codigos):
+    """`codigos`: {tabla: {nombre clave: id}} de las tablas a las que apuntan los campos select y multi."""
     if field.kind == "money":
         return parse_money(cell)
     if field.kind == "int":
         return parse_int(cell, field.signed)
-    if field.kind == "multi":   # sucursales de un empleado, por nombre clave
-        codes = [c for c in re.split(r"\s*[,/|]\s*", cell.upper()) if c]
-        unknown = [c for c in codes if c not in sucursales]
+    if field.kind in ("select", "multi"):   # por nombre clave; multi: varios separados por coma (sucursales de un empleado)
+        ids = codigos[field.ref]
+        codes = [cell.upper()] if field.kind == "select" else [c for c in re.split(r"\s*[,/|]\s*", cell.upper()) if c]
+        unknown = [c for c in codes if c not in ids]
         if unknown:
-            raise CeldaError("no existe la sucursal " + ", ".join(unknown) + ".")
-        return sorted({sucursales[c] for c in codes})
+            raise CeldaError(f"no existe {_NOMBRE_REF[field.ref]} " + ", ".join(unknown) + ".")
+        return ids[codes[0]] if field.kind == "select" else sorted({ids[c] for c in codes})
+    if field.kind == "list":   # una de las opciones fijas, sin importar mayúsculas ni acentos (LINEAS = LÍNEAS)
+        opcion = next((o for o in field.options if _ascii(o).upper() == _ascii(cell).upper()), None)
+        if opcion is None:
+            raise CeldaError(f"«{cell}» no es una opción válida (usá {' o '.join(field.options)}).")
+        return opcion
     if field.kind == "date":   # dd/mm/aaaa (también acepta aaaa-mm-dd, que es como lo guarda la base)
         try:
             return parse_date(cell)
@@ -120,13 +130,16 @@ def _parse_cell(field, cell, sucursales):
     return cell.upper()
 
 
-def _show(field, value, sucursales_by_id):
+def _show(field, value, codigo_by_id):
+    """`codigo_by_id`: {tabla: {id: nombre clave}}."""
     if field.kind == "money":
         return fmt_money(value)
     if field.kind == "date":
         return fmt_date(value) or "(vacío)"
+    if field.kind == "select":
+        return codigo_by_id[field.ref].get(value, "(ninguna)")
     if field.kind == "multi":
-        return ", ".join(sucursales_by_id[i] for i in value if i in sucursales_by_id) or "(ninguna)"
+        return ", ".join(codigo_by_id[field.ref][i] for i in value if i in codigo_by_id[field.ref]) or "(ninguna)"
     return str(value) if value != "" else "(vacío)"
 
 
@@ -150,10 +163,9 @@ def build_plan(repo, path):
     if not any(f.key == repo.clave for f in plan.columns):
         raise CsvError(f"El archivo necesita una columna «{plan.clave_label}» en la primera fila.")
 
-    sucursales = {}
-    if any(f.kind == "multi" for f in plan.columns):
-        sucursales = {codigo: i for i, codigo in refs.codigos("sucursales")}
-    sucursales_by_id = {i: c for c, i in sucursales.items()}
+    codigos = {f.ref: {codigo: i for i, codigo in refs.codigos(f.ref)}
+               for f in repo.fields if f.kind in ("select", "multi")}
+    codigo_by_id = {ref: {i: c for c, i in ids.items()} for ref, ids in codigos.items()}
     fields = {f.key: f for f in repo.fields}
 
     existing = repo.all_by_key()
@@ -167,7 +179,7 @@ def build_plan(repo, path):
             if not cell:
                 continue
             try:
-                values[f.key] = _parse_cell(f, cell, sucursales)
+                values[f.key] = _parse_cell(f, cell, codigos)
             except CeldaError as e:
                 error = f"{f.label}: {e}"
                 break
@@ -189,10 +201,10 @@ def build_plan(repo, path):
             if missing:
                 plan.skipped.append((line, clave, "Es nuevo, pero falta " + ", ".join(missing) + "."))
                 continue
-            data = {f.key: [] if f.kind == "multi" else 0 if f.kind in ("int", "bool")
+            data = {f.key: [] if f.kind == "multi" else None if f.kind == "select" else 0 if f.kind in ("int", "bool")
                     else 0.0 if f.kind == "money" else "" for f in repo.fields}
             data.update(values)
-            resumen = " · ".join(f"{fields[k].label}: {_show(fields[k], v, sucursales_by_id)}"
+            resumen = " · ".join(f"{fields[k].label}: {_show(fields[k], v, codigo_by_id)}"
                                  for k, v in data.items() if k not in (repo.clave, repo.name_key)
                                  and v not in ("", 0, 0.0, []) and fields[k].kind != "bool")
             plan.inserts.append({"clave": clave, "nombre": data.get(repo.name_key, ""),
@@ -222,8 +234,8 @@ def build_plan(repo, path):
             plan.unchanged += 1
             continue
         entry = {"id": cur["id"], "clave": clave, "nombre": cur[repo.name_key],
-                 "changes": {fields[k].label: (_show(fields[k], old, sucursales_by_id),
-                                               _show(fields[k], new, sucursales_by_id))
+                 "changes": {fields[k].label: (_show(fields[k], old, codigo_by_id),
+                                               _show(fields[k], new, codigo_by_id))
                              for k, (old, new) in changes.items()},
                  "values": {k: new for k, (_, new) in changes.items()}}
         if "descripcion" in changes and not similar(cur["descripcion"], values["descripcion"]):
@@ -249,6 +261,7 @@ def apply_plan(repo, plan, include_conflicts=False, deactivate_missing=False):
 def export_csv(repo, path):
     """Escribe los registros activos (sin stock) en un CSV que se puede editar y volver a importar."""
     fields = importable_fields(repo)
+    codigo_by_id = {f.ref: dict(refs.codigos(f.ref)) for f in fields if f.kind == "select"}
     rows = repo.list()
     with open(path, "w", newline="", encoding="utf-8-sig") as fh:
         w = csv.writer(fh, delimiter=DELIMITER)
@@ -256,5 +269,6 @@ def export_csv(repo, path):
         for r in rows:
             w.writerow([money_to_input(r[f.key]) if f.kind == "money"
                         else fmt_date(r[f.key]) if f.kind == "date"
+                        else codigo_by_id[f.ref].get(r[f.key], "") if f.kind == "select"
                         else r[f.key + "_label"] if f.kind == "multi" else r[f.key] for f in fields])
     return len(rows)

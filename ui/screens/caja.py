@@ -4,7 +4,7 @@ import tkinter as tk
 
 from db import caja
 from ui import theme
-from ui.autocomplete import Combobox
+from ui.autocomplete import Combobox, normalizar
 from ui.base import Screen
 from ui.formatting import fmt_datetime, fmt_money
 from ui.period_filter import PeriodFilter
@@ -24,21 +24,26 @@ class Caja(Screen):
     # --- construcción --------------------------------------------------
     def build(self, card):
         card.configure(padding=16)
+        # renglón 1: Buscar y Tipo, con el período a la derecha; renglón 2: Cuenta y Sucursal
         top = ttk.Frame(card, style="Inner.TFrame")
-        top.pack(fill="x", pady=(0, 12))
-        self.periodo = PeriodFilter(top, self.refresh, modo_inicial="Mes")
-        self.periodo.frame.pack(side="left")
-
+        top.pack(fill="x", pady=(0, 8))
         filtros = ttk.Frame(card, style="Inner.TFrame")
         filtros.pack(fill="x", pady=(0, 12))
+        self.buscar = tk.StringVar()
+        ttk.Label(top, text="Buscar", style="Card.TLabel").pack(side="left")
+        ttk.Entry(top, textvariable=self.buscar, width=20).pack(side="left", padx=(6, 18))
+        self.buscar.trace_add("write", lambda *_: self._mostrar())
         self.tipo, self.cuenta, self.sucursal = (tk.StringVar(value=TODOS) for _ in range(3))
         self.boxes = {}
-        for text, var in (("Tipo", self.tipo), ("Cuenta", self.cuenta), ("Sucursal", self.sucursal)):
-            ttk.Label(filtros, text=text, style="Card.TLabel").pack(side="left")
-            box = Combobox(filtros, textvariable=var, state="readonly", width=17)
+        for text, var, fila in (("Tipo", self.tipo, top), ("Cuenta", self.cuenta, filtros),
+                                ("Sucursal", self.sucursal, filtros)):
+            ttk.Label(fila, text=text, style="Card.TLabel").pack(side="left")
+            box = Combobox(fila, textvariable=var, state="readonly", width=17)
             box.pack(side="left", padx=(6, 16))
             box.bind("<<ComboboxSelected>>", lambda e: self._mostrar())
             self.boxes[text] = box
+        self.periodo = PeriodFilter(top, self.refresh, modo_inicial="Mes")
+        self.periodo.frame.pack(side="right")
 
         columns = (("fecha", "Fecha", 130, "center"), ("tipo", "Tipo de movimiento", 150, "w"),
                    ("monto", "Monto", 120, "e"), ("cuenta", "Cuenta", 110, "center"),
@@ -67,6 +72,9 @@ class Caja(Screen):
     def refresh(self):
         desde, hasta = self.periodo.rango()
         self.rows = caja.movimientos(desde, hasta)
+        for r in self.rows:   # Buscar encuentra cualquier dato de la fila, tal como se ve
+            r["_texto"] = normalizar(" ".join((fmt_datetime(r["fecha"]), r["tipo"], fmt_money(r["monto"]), str(r["monto"]),
+                                               r["cuenta"], r["vendedor"], r["sucursal"], r["detalle"])))
         for text, key in (("Tipo", "tipo"), ("Cuenta", "cuenta"), ("Sucursal", "sucursal")):
             values = [TODOS] + sorted({r[key] for r in self.rows if r[key]})
             self.boxes[text].configure(values=values)
@@ -80,7 +88,9 @@ class Caja(Screen):
             if not var.get():   # un filtro vaciado (se escribió algo que no es una opción) vuelve a TODOS
                 var.set(TODOS)
         filtros = {"tipo": self.tipo.get(), "cuenta": self.cuenta.get(), "sucursal": self.sucursal.get()}
-        rows = [r for r in self.rows if all(v == TODOS or r[k] == v for k, v in filtros.items())]
+        palabras = normalizar(self.buscar.get()).split()
+        rows = [r for r in self.rows if all(v == TODOS or r[k] == v for k, v in filtros.items())
+                and all(p in r["_texto"] for p in palabras)]
         self.tree.delete(*self.tree.get_children())
         for n, r in enumerate(rows):
             tags = (("odd",) if n % 2 else ()) + (("gasto",) if r["tipo"] == caja.TIPO_GASTO else

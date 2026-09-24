@@ -48,6 +48,11 @@ def _cater_sin_equipo():
                  "ORDER BY g.fecha DESC, g.id DESC")
 
 
+def _sucursales_sin_area():
+    return _rows("SELECT id, codigo, nombre, ciudad, 'área' AS falta FROM sucursales "
+                 "WHERE activo = 1 AND area_id IS NULL ORDER BY codigo")
+
+
 def _empleados():
     return _rows("SELECT e.id, e.nombre, e.rol, e.celular, 'sucursal' AS falta FROM empleados e WHERE e.activo = 1 "
                  "AND NOT EXISTS (SELECT 1 FROM empleado_sucursal es JOIN sucursales s ON s.id = es.sucursal_id "
@@ -77,6 +82,8 @@ CATEGORIAS = (
     ("cater", "CaTER sin equipo definido", _cater_sin_equipo,
      [_FECHA, ("nombre", "Nombre", 160), ("numero", "Número", 130), ("vendedor", "Vendedor", 150),
       ("observaciones", "Pago", 220), _QUE_FALTA]),
+    ("sucursales", "Sucursales sin área", _sucursales_sin_area,
+     [("codigo", "Nombre clave", 120), ("nombre", "Nombre", 200), ("ciudad", "Ciudad", 130), _QUE_FALTA]),
     ("empleados", "Empleados sin sucursal", _empleados,
      [("nombre", "Nombre", 220), ("rol", "Cargo", 130), ("celular", "Teléfono", 120), _QUE_FALTA]),
     ("stock", "Accesorios con stock negativo", _stock_negativo,

@@ -1,6 +1,38 @@
-"""Repositorios de Administración: sucursales, empleados y cuentas."""
+"""Repositorios de Administración: áreas, sucursales, empleados y cuentas."""
+from db import refs
 from db.repo import AMBIGUO, Repo, _like_escape
-from models import CIERRES, CUENTAS, DESCUENTOS, EMPLEADOS, PLANES, PLANES_BAF, SUCURSALES
+from models import AREAS, CUENTAS, DESCUENTOS, EMPLEADOS, PLANES, SUCURSALES
+
+
+class SucursalRepo(Repo):
+    """Sucursales con su área: cada fila trae `area_id_label` («ROS - ROSARIO»), que también sirve de filtro."""
+
+    _AREA = refs.label_sql("areas", "a")
+
+    def list(self, search="", filter_value=None):
+        searchable = [f"s.{k}" for k in self.text_keys] + refs.search_columns("areas", "a")
+        where, params = ["s.activo = 1"], []
+        for token in search.upper().split():
+            where.append("(" + " OR ".join(f"{c} LIKE ? ESCAPE '\\'" for c in searchable) + ")")
+            params += [f"%{_like_escape(token)}%"] * len(searchable)
+        if filter_value:
+            where.append(f"{self._AREA} = ?")
+            params.append(filter_value)
+        sql = (f"SELECT s.*, COALESCE({self._AREA}, '') AS area_id_label FROM sucursales s "
+               f"LEFT JOIN areas a ON a.id = s.area_id WHERE {' AND '.join(where)} ORDER BY s.{self.order}")
+        return [dict(r) for r in self._db.execute(sql, params)]
+
+    def distinct(self, key):
+        if key != "area_id":
+            return super().distinct(key)
+        sql = (f"SELECT DISTINCT {self._AREA} AS label FROM sucursales s JOIN areas a ON a.id = s.area_id "
+               "WHERE s.activo = 1 ORDER BY label")
+        return [r[0] for r in self._db.execute(sql)]
+
+    def contar_por_area(self, area_id):
+        """Sucursales activas del área (para avisar antes de darla de baja)."""
+        return self._db.execute("SELECT COUNT(*) FROM sucursales WHERE activo = 1 AND area_id = ?",
+                                (area_id,)).fetchone()[0]
 
 
 class EmpleadoRepo(Repo):
@@ -84,10 +116,10 @@ class EmpleadoRepo(Repo):
         self._set_sucursales(row_id, data["sucursales"])
 
 
-sucursales = Repo("sucursales", SUCURSALES, filter_key="provincia")
+areas = Repo("areas", AREAS, filter_key="codigo")
+sucursales = SucursalRepo("sucursales", SUCURSALES, filter_key="area_id")
 cuentas = Repo("cuentas", CUENTAS, filter_key="tipo")
 empleados = EmpleadoRepo("empleados", EMPLEADOS, filter_key="rol")
-planes = Repo("planes", PLANES, filter_key="codigo", order="CAST(codigo AS INTEGER), codigo")   # 2GB antes que 10GB
+planes = Repo("planes", PLANES, filter_key="categoria",   # el filtro por categoría separa los de líneas de los de BAF
+              order="categoria, CAST(codigo AS INTEGER), codigo")   # 2GB antes que 10GB
 descuentos = Repo("descuentos", DESCUENTOS, filter_key="codigo")
-planes_baf = Repo("planes_baf", PLANES_BAF, filter_key="codigo", order="CAST(codigo AS INTEGER), codigo")
-cierres = Repo("cierres", CIERRES, filter_key="fecha", order="fecha")

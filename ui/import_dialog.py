@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from ui import theme
+from ui.base import arriba
 
 
 class ImportPreview(tk.Toplevel):
@@ -58,10 +59,7 @@ class ImportPreview(tk.Toplevel):
         self._update_apply()
 
         self.bind("<Escape>", lambda e: self.destroy())
-        self.update_idletasks()
-        x = parent.winfo_rootx() + (parent.winfo_width() - self.winfo_width()) // 2
-        y = parent.winfo_rooty() + (parent.winfo_height() - self.winfo_height()) // 3
-        self.geometry(f"+{max(x, 0)}+{max(y, 0)}")
+        arriba(self, parent)
         self.wait_visibility()
         self.grab_set()
 

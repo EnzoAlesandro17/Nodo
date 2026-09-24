@@ -60,8 +60,10 @@ class Estadisticas(Screen):
         self.proyeccion.pack(anchor="w", pady=(0, 12))
         self._proyeccion()
 
-        self.periodo_gestiones = PeriodFilter(tab, self._gestiones, años, modo_inicial="Mes")
-        self.periodo_gestiones.frame.pack(fill="x", pady=(0, 6))
+        fila = ttk.Frame(tab, style="Inner.TFrame")
+        fila.pack(fill="x", pady=(0, 6))
+        self.periodo_gestiones = PeriodFilter(fila, self._gestiones, años, modo_inicial="Mes")
+        self.periodo_gestiones.frame.pack(side="right")
 
         self.g_total = ttk.Label(tab, style="Card.TLabel", font=theme.FONT_BOLD)
         self.g_total.pack(anchor="w", pady=(10, 12))
@@ -75,20 +77,15 @@ class Estadisticas(Screen):
 
     def _proyeccion(self):
         p = caja.proyeccion_mes_actual()
-        cerrados = f"{p['dias_cerrados']} cerrado{'' if p['dias_cerrados'] == 1 else 's'}" if p["dias_cerrados"] else \
-            "ninguno cerrado"
         self.proyeccion.config(
             text=f"Proyección de {MESES[p['mes'] - 1].lower()}: si se mantiene el ritmo, el mes cerraría en "
-                 f"$ {fmt_int(round(p['proyectado']))} (vendido hasta hoy, día {p['dia']} de {p['dias_mes']} "
-                 f"({cerrados}): $ {fmt_int(round(p['ventas']))}). Los días cerrados se cargan en "
-                 f"Administración > Días cerrados.")
+                 f"$ {fmt_int(round(p['proyectado']))} (vendido hasta hoy, día {p['dia']} de {p['dias_mes']}: "
+                 f"$ {fmt_int(round(p['ventas']))}).")
 
     def _mes_actual_elegido(self):
         """True si el período elegido es, justo, el mes en curso (ahí tiene sentido proyectar)."""
-        p = self.periodo_gestiones
         hoy = date.today()
-        return (p.modo.get() == "Mes" and int(p.anio.get()) == hoy.year
-                and MESES.index(p.mes.get()) + 1 == hoy.month)
+        return self.periodo_gestiones.mes_elegido() == (hoy.year, hoy.month)
 
     def _gestiones(self):
         desde, hasta = self.periodo_gestiones.rango()
@@ -134,9 +131,9 @@ class Estadisticas(Screen):
         barra = ttk.Frame(tab, style="Inner.TFrame")
         barra.pack(fill="x", pady=(0, 10))
         periodo = PeriodFilter(barra, lambda p=producto: self._top(p), años)
-        periodo.frame.pack(side="left")
+        periodo.frame.pack(side="right")
         orden, sims = tk.StringVar(value="Unidades"), tk.BooleanVar(value=False)
-        ttk.Label(barra, text="Ordenar por", style="Card.TLabel").pack(side="left", padx=(18, 6))
+        ttk.Label(barra, text="Ordenar por", style="Card.TLabel").pack(side="left", padx=(0, 6))
         box = Combobox(barra, textvariable=orden, values=("Unidades", "Monto"), state="readonly", width=10)
         box.pack(side="left", padx=(0, 18))
         box.bind("<<ComboboxSelected>>", lambda e, p=producto: self._top(p))
@@ -146,7 +143,7 @@ class Estadisticas(Screen):
                              ("Monto", 130, "e"), ("", 220, "w")])
         self.tops[producto] = (periodo, orden, sims, tabla)
         if producto == "equipos":
-            ttk.Label(tab, text="Se cuentan las ventas de equipos cargadas en Stock > Movimientos y en CaTER "
+            ttk.Label(tab, text="Se cuentan las ventas de equipos cargadas en los Movimientos de Equipos y en CaTER "
                                 "(los chips que entrega CaSIM, Regular y Porta quedan afuera salvo «Incluir SIMs»).",
                       style="Muted.TLabel").pack(anchor="w", pady=(8, 0))
 

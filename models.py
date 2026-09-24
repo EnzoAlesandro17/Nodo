@@ -34,9 +34,19 @@ class Field:
     total: str = ""         # pagos: campo con el monto total a pagar
     suggests: str = ""      # select: al elegir un registro, propone su precio en este otro campo (si está vacío)
     section: str = ""       # formulario: título que agrupa este campo con los siguientes de la misma sección
+    columna: str = ""       # título de la columna en la tabla, si es distinto del rótulo (p. ej. "ID")
+    na: bool = False        # text con digits: también acepta "N/A" (no tiene)
+
+    @property
+    def titulo(self):
+        return self.columna or self.label
 
 
 NUMERIC_KINDS = ("money", "int")
+
+# Anchos de columna en múltiplos de COL (3 COL entra "Nombre clave", una fecha o un teléfono; 5 COL, un mail). Lo
+# usan Áreas, Sucursales, Empleados y BAF. La última columna de cada tabla absorbe el espacio sobrante de la ventana.
+COL = 40
 
 ACCESORIOS = (
     Field("codigo", "Código", required=True, width=110),
@@ -78,36 +88,46 @@ CASIM = (
     Field("observaciones", "Observaciones", width=150, stretch=True),
 )
 
-def _linea(numero_a, numero_b, tras_a=(), tras_b=()):
-    """Regular y Porta: el mismo formato, cambian los dos números. Cada una descuenta una SIM del stock (como CaSIM).
-    `numero_a` (key, label, obligatorio): el de contacto o el a portar; `numero_b`: el nuevo o el NIM temporal;
-    `tras_a` y `tras_b`: campos propios de la gestión, a continuación de `numero_a` y de `numero_b`."""
-    (ka, la, ra), (kb, lb, rb) = numero_a, numero_b
+# Secciones de los formularios largos (BAF, Regular y Porta)
+SECCION_GESTION = "Datos de la gestión"
+SECCION_TITULAR = "Datos del titular"
+SECCION_SERVICIO = "Datos del servicio"
+SECCION_LINEA = "Datos de la línea"
+
+
+def _linea(titular=(), linea=()):
+    """Regular y Porta: el mismo formato, en tres secciones (gestión, titular y línea); cambian los campos propios de
+    cada una: `titular` (Regular: el teléfono de contacto) y `linea` (Regular: el número nuevo; Porta: el número a
+    portar y los datos de la portabilidad). Cada una descuenta una SIM del stock (como CaSIM). El orden de las columnas
+    de la tabla no es este: lo define cada pantalla (ui/screens/gestiones.py)."""
+    def en(seccion, campos):
+        return tuple(replace(f, section=seccion) for f in campos)
     return (
-        Field("fecha", "Fecha y hora", kind="datetime", required=True, width=125),
-        Field("nombre", "Nombre o Razón", required=True, width=140),
-        Field(ka, la, required=ra, width=110, digits=10),
-        *tras_a,
-        Field("documento", "DNI / CUIT", width=100, digits=(7, 8, 11)),
-        Field("plan_id", "Plan", kind="select", required=True, width=110, ref="planes"),
-        Field("descuento_id", "Descuento", kind="select", width=110, ref="descuentos"),
-        Field(kb, lb, required=rb, width=100, digits=10),
-        *tras_b,
-        Field("id_gestion", "ID de gestión", required=True, width=90, digits=9),
-        Field("vendedor_id", "Vendedor", kind="select", width=100, ref="empleados"),
-        Field("sim_id", "Tipo de SIM", kind="select", required=True, width=140, ref="equipos", in_table=False),
-        Field("sucursal_id", "Sucursal", kind="select", required=True, width=100, ref="sucursales", in_table=False),
-        Field("observaciones", "Observaciones", width=140, stretch=True),
+        *en(SECCION_GESTION, (
+            Field("fecha", "Fecha y hora", kind="datetime", required=True, width=125),
+            Field("vendedor_id", "Vendedor", kind="select", width=100, ref="empleados"),
+            Field("sucursal_id", "Sucursal", kind="select", required=True, width=100, ref="sucursales", in_table=False),
+            Field("sim_id", "Tipo de SIM", kind="select", required=True, width=140, ref="equipos", in_table=False),
+            Field("plan_id", "Plan", kind="select", required=True, width=110, ref="planes"),
+            Field("descuento_id", "Descuento", kind="select", width=110, ref="descuentos"),
+            Field("id_gestion", "ID de gestión", required=True, width=90, digits=9),
+            Field("observaciones", "Observaciones", width=140, stretch=True))),
+        *en(SECCION_TITULAR, (
+            Field("nombre", "Nombre o Razón", required=True, width=140),
+            Field("documento", "DNI / CUIT", width=100, digits=(7, 8, 11)),
+            *titular)),
+        *en(SECCION_LINEA, linea),
     )
 
 
 # Regular y Porta: obligatorios solo Fecha y hora, Nombre, el número que identifica la línea (Nuevo número / Número
 # a portar), Plan, Vendedor, Sucursal y Tipo de SIM; el resto se completa después, editando. En la tabla solo se ven
-# Fecha y hora, Nombre, ese número, Plan, Vendedor y Observaciones, con el ancho de Nombre (el doble para Observaciones).
+# Fecha y hora, Nombre, ese número, Plan, Vendedor y Observaciones, con el ancho de Nombre (el doble para Observaciones),
+# más los `visibles` de cada una (Regular: el ID de gestión, después del número), opcionales como el resto.
 _ANCHO_LINEA = 140   # el de "Nombre o Razón"
 
 
-def _ajustar_linea(fields, numero_key, ocultos):
+def _ajustar_linea(fields, numero_key, ocultos, visibles=()):
     anchos = {"fecha": _ANCHO_LINEA, numero_key: _ANCHO_LINEA, "plan_id": _ANCHO_LINEA, "vendedor_id": _ANCHO_LINEA,
              "observaciones": _ANCHO_LINEA * 2}
 
@@ -116,6 +136,8 @@ def _ajustar_linea(fields, numero_key, ocultos):
             f = replace(f, required=True)
         if f.key in ocultos:
             f = replace(f, required=False, in_table=False)
+        elif f.key in visibles:
+            f = replace(f, required=False, columna="ID" if f.key == "id_gestion" else "")
         if f.key in anchos:
             f = replace(f, width=anchos[f.key])
         return f
@@ -123,48 +145,48 @@ def _ajustar_linea(fields, numero_key, ocultos):
     return tuple(ajustar(f) for f in fields)
 
 
-REGULAR = _ajustar_linea(_linea(("telefono", "Teléfono de contacto", False), ("numero", "Nuevo número", True)),
-                         "numero", ocultos=("telefono", "documento", "descuento_id", "id_gestion"))
+REGULAR = _ajustar_linea(_linea(titular=(Field("telefono", "Teléfono de contacto", width=110, digits=10),),
+                                 linea=(Field("numero", "Nuevo número", required=True, width=100, digits=10),)),
+                         "numero", ocultos=("telefono", "documento", "descuento_id"), visibles=("id_gestion",))
 COMPANIAS = ("PERSONAL", "MOVISTAR", "IMOWI")   # sugeridas: se puede escribir otra
 
-PORTA = _ajustar_linea(_linea(
-    ("numero_portar", "Número a portar", True), ("nim", "NIM temporal", False),
-    tras_a=(Field("compania_donante", "Compañía donante", kind="choice", options=COMPANIAS, width=110),
-            Field("tipo_negocio", "Tipo de negocio actual", kind="list", options=("PREPAGO", "POSPAGO"), width=100)),
-    tras_b=(Field("pin", "PIN de portabilidad", width=90),
-            Field("fecha_portacion", "Fecha de portación", kind="date", width=110, in_table=False))),
+PORTA = _ajustar_linea(_linea(linea=(
+    Field("numero_portar", "Número a portar", required=True, width=110, digits=10),
+    Field("compania_donante", "Compañía donante", kind="choice", options=COMPANIAS, width=110),
+    Field("tipo_negocio", "Tipo de negocio actual", kind="list", options=("PREPAGO", "POSPAGO"), width=100),
+    Field("nim", "NIM temporal", width=100, digits=10),
+    Field("pin", "PIN de portabilidad", width=90),
+    Field("fecha_portacion", "Fecha de portación", kind="date", width=110, in_table=False))),
     "numero_portar", ocultos=("documento", "compania_donante", "tipo_negocio", "descuento_id", "nim", "pin", "id_gestion"))
 
 # BAF (banda ancha fija = fibra óptica): venta e instalación, del titular al estado de la instalación. El
 # formulario se agrupa en tres secciones (gestión, titular, servicio); la tabla (ver BAF.columns en
 # ui/screens/gestiones.py) muestra solo fecha, nombre, plan, estado, fecha pactada y fecha de instalación.
-ESTADOS_BAF = ("Deuda", "HP", "Falta pactar", "Pactada", "Cancelada", "Instalada")
+ESTADOS_BAF = ("Deuda", "HP", "Falta pactar", "Pactada", "Cancelada", "Arrepentimiento", "Instalada")
 TIPOS_DOMICILIO = ("Casa", "Edificio", "Pasillo", "Empresa")
 
-SECCION_GESTION = "Datos de la gestión"
-SECCION_TITULAR = "Datos del titular"
-SECCION_SERVICIO = "Datos del servicio"
-
 BAF = (
-    Field("fecha", "Fecha de ingreso", kind="datetime", required=True, width=125, section=SECCION_GESTION),
-    Field("vendedor_id", "Vendedor", kind="select", required=True, width=100, ref="empleados", in_table=False,
+    Field("fecha", "Fecha de ingreso", kind="datetime", required=True, width=3 * COL, columna="Ingreso",
           section=SECCION_GESTION),
-    Field("estado", "Estado", kind="list", options=ESTADOS_BAF, width=90, section=SECCION_GESTION),
-    Field("fecha_pactada", "Fecha pactada", kind="date", width=90, section=SECCION_GESTION),
+    Field("vendedor_id", "Vendedor", kind="select", required=True, width=3 * COL, ref="empleados",
+          section=SECCION_GESTION),
+    Field("estado", "Estado", kind="list", options=ESTADOS_BAF, width=3 * COL, section=SECCION_GESTION),
+    Field("fecha_pactada", "Fecha pactada", kind="date", width=3 * COL, columna="Pactada", section=SECCION_GESTION),
     Field("franja", "Franja pactada", kind="list", options=("AM", "PM"), width=50, in_table=False,
           section=SECCION_GESTION),
-    Field("fecha_instalacion", "Fecha de instalación", kind="date", width=110, section=SECCION_GESTION),
-    Field("ot", "Código de OT", width=90, in_table=False, section=SECCION_GESTION),
-    Field("sds", "Código de SDS", width=90, in_table=False, section=SECCION_GESTION),
+    Field("fecha_instalacion", "Fecha de instalación", kind="date", width=3 * COL, columna="Instalación",
+          stretch=True, section=SECCION_GESTION),
+    Field("ot", "Código de OT", width=3 * COL, columna="OT", section=SECCION_GESTION),
+    Field("sds", "Código de SDS", width=3 * COL, columna="SDS", section=SECCION_GESTION),
     Field("con_form", "Cargado en el formulario", kind="bool", section=SECCION_GESTION),
     Field("observaciones", "Observaciones", width=150, stretch=True, in_table=False, section=SECCION_GESTION),
 
-    Field("nombre", "Titular", required=True, width=150, section=SECCION_TITULAR),
+    Field("nombre", "Titular", required=True, width=5 * COL, section=SECCION_TITULAR),
     Field("documento", "DNI / CUIT", width=100, digits=(7, 8, 11), in_table=False, section=SECCION_TITULAR),
     Field("fecha_nacimiento", "Fecha de nacimiento", kind="date", in_table=False, section=SECCION_TITULAR),
-    Field("email", "Mail", in_table=False, section=SECCION_TITULAR),
+    Field("email", "Mail", kind="email", in_table=False, section=SECCION_TITULAR),
     Field("telefono", "Teléfono", required=True, width=100, digits=10, in_table=False, section=SECCION_TITULAR),
-    Field("telefono_alt", "Alternativo", digits=10, in_table=False, section=SECCION_TITULAR),
+    Field("telefono_alt", "Alternativo", digits=10, na=True, in_table=False, section=SECCION_TITULAR),
 
     Field("localidad", "Localidad", required=True, width=110, in_table=False, section=SECCION_SERVICIO),
     Field("calle", "Calle", required=True, width=130, in_table=False, section=SECCION_SERVICIO),
@@ -173,7 +195,8 @@ BAF = (
     Field("torre_piso_depto", "Torre, piso y depto.", in_table=False, section=SECCION_SERVICIO),
     Field("tipo_domicilio", "Tipo de domicilio", kind="list", required=True, options=TIPOS_DOMICILIO, in_table=False,
           section=SECCION_SERVICIO),
-    Field("plan_id", "Plan de internet", kind="select", width=90, ref="planes_baf", section=SECCION_SERVICIO),
+    Field("plan_id", "Plan de internet", kind="select", width=3 * COL, ref="planes", columna="Plan",
+          section=SECCION_SERVICIO),   # categoría BAF; en la tabla, solo el nombre clave (200MB + TV HD)
     Field("cantidad_tv", "Cantidad de TV", kind="list", options=("N/A", "1", "2", "3"), width=50, in_table=False,
           section=SECCION_SERVICIO),
 )
@@ -206,14 +229,14 @@ GASTOS = (
     Field("observaciones", "Observaciones", width=160, stretch=True),
 )
 
-# Administración
-PLANES = (   # planes vigentes: el que se da de baja deja de ofrecerse en las gestiones (Regular, Porta...)
+# Administrar
+# Planes vigentes (el que se da de baja deja de ofrecerse). La categoría dice en qué gestiones se ofrece:
+# LÍNEAS en Regular y Porta (2GB, 4GB...), BAF en BAF (fibra: 200MB, 500MB...).
+CATEGORIA_LINEAS, CATEGORIA_BAF = "LÍNEAS", "BAF"
+CATEGORIAS_PLAN = (CATEGORIA_LINEAS, CATEGORIA_BAF)
+PLANES = (
     Field("codigo", "Nombre clave", required=True, width=130),
-    Field("descripcion", "Descripción", required=True, width=400, stretch=True),
-)
-
-PLANES_BAF = (   # planes de fibra (200MB, 500MB...)
-    Field("codigo", "Nombre clave", required=True, width=130),
+    Field("categoria", "Categoría", kind="list", options=CATEGORIAS_PLAN, required=True, width=130),
     Field("descripcion", "Descripción", required=True, width=400, stretch=True),
 )
 
@@ -222,9 +245,7 @@ DESCUENTOS = (
     Field("descripcion", "Descripción", required=True, width=400, stretch=True),
 )
 
-# Días que el local no abre (feriados, balance...): los carga quien mantiene los datos, año a año.
-# Estadísticas los resta de la proyección del mes en curso.
-# Administración > Tareas (traídas de MyTools): pendientes del local, abiertas o cerradas
+# Administrar > Tareas (traídas de MyTools): pendientes del local, abiertas o cerradas
 ESTADOS_TAREA = ("Abierta", "Cerrada")
 TAREAS = (
     Field("fecha", "Creada", kind="datetime", required=True, width=125),
@@ -235,33 +256,30 @@ TAREAS = (
     Field("comentarios", "Comentarios", width=200, in_table=False),
 )
 
-CIERRES = (
-    Field("fecha", "Fecha", kind="date", required=True, width=110),
-    Field("motivo", "Motivo", width=250, stretch=True),
+AREAS = (   # agrupan sucursales: cada sucursal pertenece a un área
+    Field("codigo", "Nombre clave", required=True, width=3 * COL),
+    Field("nombre", "Nombre", required=True, width=6 * COL, stretch=True),
 )
 
 SUCURSALES = (
-    Field("codigo", "Nombre clave", required=True, width=120),
-    Field("entidad", "Entidad", in_table=False),
-    Field("nombre", "Nombre", required=True, width=160, stretch=True),
-    Field("calle", "Calle", in_table=False),
-    Field("numero", "Número", in_table=False),
-    Field("piso_depto", "Piso / Depto", in_table=False),
-    Field("telefono", "Teléfono", in_table=False),
-    Field("ciudad", "Ciudad", kind="choice", width=120),
+    Field("codigo", "Nombre clave", required=True, width=3 * COL),
+    Field("nombre", "Nombre", required=True, width=2 * COL),
+    Field("area_id", "Área", kind="select", required=True, ref="areas", width=3 * COL),
+    Field("provincia", "Provincia", kind="choice", width=3 * COL),
+    Field("ciudad", "Ciudad", kind="choice", width=3 * COL),
     Field("cp", "CP", in_table=False),
-    Field("provincia", "Provincia", kind="choice", width=120),
-    Field("responsable", "Responsable", width=130),
-    Field("celular", "Celular", width=110),
+    Field("direccion", "Dirección", in_table=False),   # calle, número, piso y depto.
+    Field("telefono", "Teléfono", width=4 * COL),     # puede traer dos: "4401111 / 3415550000"
+    Field("responsable", "Responsable", width=4 * COL, stretch=True),
 )
 
 EMPLEADOS = (   # el orden es el de las columnas de la tabla y del formulario
-    Field("nombre", "Nombre", required=True, width=150),
-    Field("rol", "Cargo", kind="choice", width=130),
-    Field("sucursales", "Sucursales", kind="multi", ref="sucursales", width=240, stretch=True),
-    Field("celular", "Teléfono", width=120),
-    Field("email", "Mail", kind="email", width=210),
-    Field("fecha_nacimiento", "Fecha de nacimiento", kind="date", width=140),
+    Field("nombre", "Nombre", required=True, width=4 * COL),
+    Field("rol", "Cargo", kind="choice", width=3 * COL),
+    Field("sucursales", "Sucursales", kind="multi", required=True, ref="sucursales", width=4 * COL),
+    Field("celular", "Teléfono", width=3 * COL),
+    Field("email", "Mail", kind="email", width=5 * COL),
+    Field("fecha_nacimiento", "Fecha de nacimiento", kind="date", width=4 * COL, stretch=True),
 )
 
 CUENTAS = (

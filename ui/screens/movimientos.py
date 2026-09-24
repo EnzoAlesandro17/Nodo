@@ -1,4 +1,7 @@
-"""Pantallas del menú Stock > Movimientos: ingresos, ventas y conciliaciones."""
+"""Movimientos de stock (botón Movimientos de Administrar > Stock > Accesorios / Equipos): ingresos, ventas y
+conciliaciones."""
+from tkinter import ttk
+
 from db import movimientos as repos
 from ui.gestion_base import GestionScreen
 
@@ -7,6 +10,14 @@ class MovimientoScreen(GestionScreen):
     noun, noun_plural = "movimiento", "movimientos"
     left_keys = ("producto_id", "cliente")
     form_new, form_edit = "Nuevo movimiento", "Editar movimiento"
+    stock = ""   # nombre de la pantalla de stock a la que vuelve (en ui.screens.stock)
+
+    def extra_actions(self, bar):
+        ttk.Button(bar, text="Volver al stock", command=self._volver).pack(side="left", padx=(16, 0))
+
+    def _volver(self):
+        from ui.screens import stock   # acá: stock importa este módulo
+        self.winfo_toplevel().show(getattr(stock, self.stock))
 
     def _defaults(self):
         """Sucursal y vendedor del último movimiento, para no elegirlos cada vez."""
@@ -55,9 +66,11 @@ class MovAccesorios(MovimientoScreen):
     title = "Stock · Movimientos de accesorios"
     subtitle = "Ingresos, ventas y conciliaciones de accesorios"
     repo = repos.mov_accesorios
+    stock = "StockAccesorios"
 
 
 class MovEquipos(MovimientoScreen):
     title = "Stock · Movimientos de equipos"
     subtitle = "Ingresos, ventas y conciliaciones de equipos"
     repo = repos.mov_equipos
+    stock = "StockEquipos"

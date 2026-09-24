@@ -5,6 +5,7 @@ from tkinter import ttk
 
 from ui import entry_helpers, theme
 from ui.autocomplete import Combobox
+from ui.base import arriba
 from ui.formatting import (fmt_date, fmt_datetime, fmt_money, money_to_input, now_iso, parse_date,
                            parse_datetime, parse_int, parse_money)
 
@@ -37,10 +38,10 @@ class FormDialog(tk.Toplevel):
         self.pago_vars = {}    # campo pagos -> (cuenta, monto) escritos y todavía sin agregar
         choices = choices or {}
 
-        body = ttk.Frame(self, padding=(28, 22, 28, 4))
+        body = ttk.Frame(self, padding=(28, 16, 28, 4))
         body.pack(fill="both")
         ttk.Label(body, text=title, style="Title.TLabel", font=("Segoe UI", 14, "bold")
-                  ).grid(row=0, column=0, columnspan=2 * columns, sticky="w", pady=(0, 12))
+                  ).grid(row=0, column=0, columnspan=2 * columns, sticky="w", pady=(0, 8))
 
         ew = 34 if columns == 1 else 24   # ancho de los campos
         row, col, section = 1, 0, None
@@ -50,7 +51,7 @@ class FormDialog(tk.Toplevel):
                     row, col = row + 1, 0
                 ttk.Label(body, text=f.section, font=theme.FONT_BOLD, foreground=theme.ACCENT
                           ).grid(row=row, column=0, columnspan=2 * columns, sticky="w",
-                                 pady=(14 if section else 0, 8))
+                                 pady=(10 if section else 0, 4))
                 row += 1
                 section = f.section
             r, lc = row, col * 2   # fila y columna del rótulo; el campo va en lc + 1
@@ -62,7 +63,7 @@ class FormDialog(tk.Toplevel):
             if f.required:
                 ttk.Label(label, text=" *", foreground=theme.DANGER).pack(side="left")
             label.grid(row=r, column=lc, sticky="nw" if f.kind == "pagos" else "w",
-                       padx=(0 if lc == 0 else 28, 18), pady=(9, 6) if f.kind == "pagos" else 6)
+                       padx=(0 if lc == 0 else 28, 18), pady=(6, 3) if f.kind == "pagos" else 3)
             if f.kind == "pagos":
                 self._build_pagos(body, r, f, values.get(f.key, []) if values else [], choices.get(f.key, []))
                 continue
@@ -116,7 +117,7 @@ class FormDialog(tk.Toplevel):
         self.error.grid(row=row if col == 0 else row + 1, column=0, columnspan=2 * columns, sticky="w",
                         pady=(10, 0))
 
-        bar = ttk.Frame(self, padding=(28, 8, 28, 22))
+        bar = ttk.Frame(self, padding=(28, 8, 28, 16))
         bar.pack(fill="x")
         ttk.Label(bar, text="*", foreground=theme.DANGER, font=theme.FONT_BOLD).pack(side="left")
         ttk.Label(bar, text=" Obligatorio", style="Sub.TLabel").pack(side="left")
@@ -126,10 +127,7 @@ class FormDialog(tk.Toplevel):
         self.bind("<Return>", lambda e: self._save())
         self.bind("<Escape>", lambda e: self.destroy())
 
-        self.update_idletasks()
-        x = parent.winfo_rootx() + (parent.winfo_width() - self.winfo_width()) // 2
-        y = parent.winfo_rooty() + (parent.winfo_height() - self.winfo_height()) // 3
-        self.geometry(f"+{max(x, 0)}+{max(y, 0)}")
+        arriba(self, parent)
         self.wait_visibility()
         self.grab_set()
         next(self.widgets[f.key] for f in fields if f.kind != "datetime").focus_set()
@@ -282,6 +280,8 @@ class FormDialog(tk.Toplevel):
         for f in self.fields:
             if f.kind == "multi":
                 data[f.key] = [self.multi_ids[f.key][i] for i in self.multi_boxes[f.key].curselection()]
+                if f.required and not data[f.key]:
+                    return self._fail(f"{f.label}: elegí al menos una.", f)
                 continue
             if f.kind == "pagos":
                 cuenta, monto = self.pago_vars[f.key]
@@ -320,13 +320,16 @@ class FormDialog(tk.Toplevel):
                 except ValueError:
                     return self._fail(f"{f.label}: usá el formato dd/mm/aaaa.", f)
                 continue
-            if f.digits:
+            if f.na and raw.upper().replace(" ", "") in ("N/A", "NA"):
+                raw = "N/A"
+            elif f.digits:
                 raw = re.sub(r"[\s\-()]", "", raw)   # tolera espacios, guiones y paréntesis al pegar
                 largos = f.digits if isinstance(f.digits, tuple) else (f.digits,)
                 if raw and not (raw.isdigit() and len(raw) in largos):
                     cuantos = " u ".join([", ".join(map(str, largos[:-1])), str(largos[-1])] if len(largos) > 1
                                          else [str(largos[0])])
-                    return self._fail(f"{f.label}: tiene que tener {cuantos} dígitos, solo números.", f)
+                    return self._fail(f"{f.label}: tiene que tener {cuantos} dígitos, solo números"
+                                      + (" (o N/A si no tiene)." if f.na else "."), f)
             if f.kind == "email":
                 raw = raw.lower()
                 if raw and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", raw):

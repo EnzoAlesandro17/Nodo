@@ -144,9 +144,12 @@ CREATE TABLE IF NOT EXISTS ajustes (
     valor TEXT NOT NULL DEFAULT ''
 );
 
+-- Planes de todas las gestiones: `categoria` (models.CATEGORIAS_PLAN) dice cuáles ofrece cada una
+-- (LÍNEAS: Regular y Porta; BAF: fibra).
 CREATE TABLE IF NOT EXISTS planes (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     codigo      TEXT NOT NULL UNIQUE,
+    categoria   TEXT NOT NULL DEFAULT '',
     descripcion TEXT NOT NULL,
     activo      INTEGER NOT NULL DEFAULT 1
 );
@@ -205,14 +208,19 @@ CREATE TABLE IF NOT EXISTS porta (
 """
 SCHEMA += PORTA_DDL
 
-SCHEMA += """
+# Tabla de los planes de fibra hasta la migración 12 (ahora son planes de categoría BAF). Solo la usa la migración 1,
+# que en las bases más viejas la creaba y la llenaba.
+PLANES_BAF_VIEJA_DDL = """
 CREATE TABLE IF NOT EXISTS planes_baf (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     codigo      TEXT NOT NULL UNIQUE,      -- p. ej. 500MB
     descripcion TEXT NOT NULL,
     activo      INTEGER NOT NULL DEFAULT 1
 );
+"""
 
+# BAF va en una constante propia porque la migración 12 reconstruye la tabla (plan_id pasó de planes_baf a planes).
+BAF_DDL = """
 CREATE TABLE IF NOT EXISTS baf (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     fecha             TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),   -- fecha de ingreso
@@ -229,7 +237,7 @@ CREATE TABLE IF NOT EXISTS baf (
     entre_calles      TEXT    NOT NULL DEFAULT '',
     torre_piso_depto  TEXT    NOT NULL DEFAULT '',
     tipo_domicilio    TEXT    NOT NULL,                                          -- Casa | Edificio | Pasillo | Empresa
-    plan_id           INTEGER REFERENCES planes_baf(id),
+    plan_id           INTEGER REFERENCES planes(id),                            -- de categoría BAF
     cantidad_tv       TEXT    NOT NULL DEFAULT '',                               -- N/A | 1 | 2 | 3
     fecha_pactada     TEXT    NOT NULL DEFAULT '',
     franja            TEXT    NOT NULL DEFAULT '',                               -- AM | PM
@@ -241,21 +249,29 @@ CREATE TABLE IF NOT EXISTS baf (
     observaciones     TEXT    NOT NULL DEFAULT '',
     activo            INTEGER NOT NULL DEFAULT 1
 );
+"""
+SCHEMA += BAF_DDL
+
+SCHEMA += """
+-- Áreas: agrupan sucursales (cada sucursal pertenece a un área; un empleado, a una o varias sucursales).
+CREATE TABLE IF NOT EXISTS areas (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    codigo  TEXT NOT NULL UNIQUE,
+    nombre  TEXT NOT NULL,
+    activo  INTEGER NOT NULL DEFAULT 1
+);
 
 CREATE TABLE IF NOT EXISTS sucursales (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     codigo      TEXT NOT NULL UNIQUE,      -- nombre clave: tipo + número (A001, L002...); el nombre legible va en `nombre`
-    entidad     TEXT NOT NULL DEFAULT '',
+    area_id     INTEGER REFERENCES areas(id),   -- obligatoria en el formulario (NULL: cargada antes de las áreas)
     nombre      TEXT NOT NULL,
-    calle       TEXT NOT NULL DEFAULT '',
-    numero      TEXT NOT NULL DEFAULT '',
-    piso_depto  TEXT NOT NULL DEFAULT '',
-    telefono    TEXT NOT NULL DEFAULT '',
+    provincia   TEXT NOT NULL DEFAULT '',
     ciudad      TEXT NOT NULL DEFAULT '',
     cp          TEXT NOT NULL DEFAULT '',
-    provincia   TEXT NOT NULL DEFAULT '',
+    direccion   TEXT NOT NULL DEFAULT '',      -- calle, número, piso y depto. en un solo texto
+    telefono    TEXT NOT NULL DEFAULT '',
     responsable TEXT NOT NULL DEFAULT '',
-    celular     TEXT NOT NULL DEFAULT '',
     activo      INTEGER NOT NULL DEFAULT 1
 );
 
@@ -285,15 +301,7 @@ CREATE TABLE IF NOT EXISTS cuentas (
     activo        INTEGER NOT NULL DEFAULT 1
 );
 
--- Días que el local no abre (feriados, balance...), para la proyección mensual de Estadísticas.
-CREATE TABLE IF NOT EXISTS cierres (
-    id     INTEGER PRIMARY KEY AUTOINCREMENT,
-    fecha  TEXT    NOT NULL UNIQUE,
-    motivo TEXT    NOT NULL DEFAULT '',
-    activo INTEGER NOT NULL DEFAULT 1
-);
-
--- Tareas del local (Administración > Tareas, traídas de MyTools). `cerrada`: cuándo pasó a Cerrada (la pone el repo).
+-- Tareas del local (Administrar > Tareas, traídas de MyTools). `cerrada`: cuándo pasó a Cerrada (la pone el repo).
 CREATE TABLE IF NOT EXISTS tareas (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     fecha        TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
@@ -371,11 +379,19 @@ def _columnas(conn, tabla):
     return [r["name"] for r in conn.execute(f"PRAGMA table_info({tabla})")]
 
 
+PLANES_FIBRA = [("200MB", "FIBRA 200 MB"), ("500MB", "FIBRA 500 MB"), ("800MB", "FIBRA 800 MB")]
+
+
 def _sembrar_planes_baf(conn):
-    """Los planes de fibra vigentes, si la tabla está vacía."""
+    """Los planes de fibra vigentes en la tabla vieja planes_baf, si está vacía (migración 1; la 12 los pasa a planes)."""
+    conn.execute(PLANES_BAF_VIEJA_DDL)
     if not conn.execute("SELECT 1 FROM planes_baf").fetchone():
-        conn.executemany("INSERT INTO planes_baf (codigo, descripcion) VALUES (?, ?)",
-                         [("200MB", "FIBRA 200 MB"), ("500MB", "FIBRA 500 MB"), ("800MB", "FIBRA 800 MB")])
+        conn.executemany("INSERT INTO planes_baf (codigo, descripcion) VALUES (?, ?)", PLANES_FIBRA)
+
+
+def _sembrar_planes_fibra(conn):
+    """Base nueva: los planes de fibra vigentes, como planes de categoría BAF."""
+    conn.executemany("INSERT INTO planes (codigo, categoria, descripcion) VALUES (?, 'BAF', ?)", PLANES_FIBRA)
 
 
 def _migrar_planes(conn):
@@ -560,10 +576,68 @@ def _m9_pagos_con_cuenta_obligatoria(conn):
     conn.execute("DROP TABLE pagos_viejo")
 
 
+def _m10_sucursales_por_area(conn):
+    """Cada sucursal pertenece a un área (la tabla areas la crea SCHEMA). Las que ya existían quedan sin área:
+    aparecen en Data > Datos por completar y se asigna editándolas."""
+    if "area_id" not in _columnas(conn, "sucursales"):
+        conn.execute("ALTER TABLE sucursales ADD COLUMN area_id INTEGER REFERENCES areas(id)")
+
+
+def _m11_sucursales_direccion_y_telefono(conn):
+    """Sucursales: calle, número y piso/depto. pasan a una sola Dirección («MITRE 100, 2 B»); Celular se suma a
+    Teléfono (si los dos tienen algo distinto quedan «teléfono / celular»); Entidad se quita."""
+    columnas = _columnas(conn, "sucursales")
+    if "direccion" not in columnas:
+        conn.execute("ALTER TABLE sucursales ADD COLUMN direccion TEXT NOT NULL DEFAULT ''")
+    if "calle" in columnas:
+        conn.execute("UPDATE sucursales SET direccion = trim(trim(calle || ' ' || numero) || "
+                     "CASE WHEN piso_depto <> '' THEN ', ' || piso_depto ELSE '' END, ' ,')")
+    if "celular" in columnas:
+        conn.execute("UPDATE sucursales SET telefono = CASE WHEN telefono = '' THEN celular "
+                     "WHEN celular = '' OR celular = telefono THEN telefono ELSE telefono || ' / ' || celular END")
+    for columna in ("entidad", "calle", "numero", "piso_depto", "celular"):
+        if columna in columnas:
+            conn.execute(f"ALTER TABLE sucursales DROP COLUMN {columna}")
+
+
+def _m12_planes_unificados_con_categoria(conn):
+    """Planes y Planes BAF pasan a ser una sola tabla (planes) con categoría: los que ya estaban quedan LÍNEAS
+    (Regular y Porta) y los de planes_baf se agregan como BAF. Si un nombre clave de fibra ya estaba en planes,
+    entra con «-BAF» al final. BAF se reconstruye (BAF_DDL) para que plan_id apunte a planes, y planes_baf se borra."""
+    if "categoria" not in _columnas(conn, "planes"):
+        conn.execute("ALTER TABLE planes ADD COLUMN categoria TEXT NOT NULL DEFAULT ''")
+        conn.execute("UPDATE planes SET categoria = 'LÍNEAS'")
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'planes_baf'").fetchone():
+        return
+    equivalencia = {}   # id de planes_baf -> id de planes
+    for viejo, codigo, descripcion, activo in conn.execute(
+            "SELECT id, codigo, descripcion, activo FROM planes_baf").fetchall():
+        if conn.execute("SELECT 1 FROM planes WHERE codigo = ?", (codigo,)).fetchone():
+            codigo += "-BAF"
+        equivalencia[viejo] = conn.execute(
+            "INSERT INTO planes (codigo, categoria, descripcion, activo) VALUES (?, 'BAF', ?, ?)",
+            (codigo, descripcion, activo)).lastrowid
+    columnas = _columnas(conn, "baf")
+    casos = " ".join(f"WHEN plan_id = {viejo} THEN {nuevo}" for viejo, nuevo in equivalencia.items())
+    select = ", ".join(f"CASE {casos} ELSE NULL END" if c == "plan_id" and casos else c for c in columnas)
+    conn.execute("ALTER TABLE baf RENAME TO baf_viejo")
+    conn.execute(BAF_DDL)
+    conn.execute(f"INSERT INTO baf ({', '.join(columnas)}) SELECT {select} FROM baf_viejo")
+    conn.execute("DROP TABLE baf_viejo")
+    conn.execute("DROP TABLE planes_baf")
+
+
+def _m13_sin_dias_cerrados(conn):
+    """Se quitó Días cerrados (feriados y otros días sin abrir): la proyección del mes usa todos los días del mes."""
+    conn.execute("DROP TABLE IF EXISTS cierres")
+
+
 MIGRACIONES = [_m1_bases_anteriores_al_control_de_version, _m2_pagos_de_ventas_dadas_de_baja,
                _m3_ventas_con_varios_productos_e_intereses, _m4_regular_y_porta_descuentan_sim,
                _m5_empleados_mail_y_nacimiento, _m6_porta_fecha_portacion, _m7_chips_a_equipos,
-               _m8_gastos_rubro, _m9_pagos_con_cuenta_obligatoria]
+               _m8_gastos_rubro, _m9_pagos_con_cuenta_obligatoria, _m10_sucursales_por_area,
+               _m11_sucursales_direccion_y_telefono, _m12_planes_unificados_con_categoria,
+               _m13_sin_dias_cerrados]
 
 
 def _migrar(conn):
@@ -599,7 +673,7 @@ def get():
         conn.executescript(SCHEMA)
         if base_nueva:   # ya nace en la última versión
             with conn:
-                _sembrar_planes_baf(conn)
+                _sembrar_planes_fibra(conn)
                 conn.execute(f"PRAGMA user_version = {len(MIGRACIONES)}")
         else:
             _migrar(conn)

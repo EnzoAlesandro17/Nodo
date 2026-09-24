@@ -5,13 +5,12 @@ from tkinter import filedialog, messagebox, ttk
 
 from db import administracion, arqueos
 from ui import entry_helpers, theme
-from ui.autocomplete import Combobox
-from ui.base import Screen
+from ui.autocomplete import Combobox, normalizar
+from ui.base import Screen, arriba
 from ui.formatting import fmt_datetime, fmt_money
 from ui.paths import escritorio
+from ui.period_filter import PeriodFilter
 
-MESES = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre",
-         "noviembre", "diciembre")
 TODOS = "TODOS"
 
 
@@ -20,7 +19,6 @@ class Arqueo(Screen):
     subtitle = "Lo que hay en la caja fuerte y en la chica contra el saldo del sistema; la diferencia se arrastra al siguiente"
 
     def __init__(self, parent):
-        self.mes = date.today().replace(day=1)
         self.rows, self.visibles = [], {}
         super().__init__(parent)
         self.refresh()
@@ -30,20 +28,17 @@ class Arqueo(Screen):
         card.configure(padding=16)
         top = ttk.Frame(card, style="Inner.TFrame")
         top.pack(fill="x")
-        ttk.Button(top, text="◀", width=3, command=lambda: self._mover(-1)).pack(side="left")
-        self.lbl_mes = ttk.Label(top, style="Card.TLabel", font=("Segoe UI", 12, "bold"), width=18, anchor="center")
-        self.lbl_mes.pack(side="left", padx=6)
-        ttk.Button(top, text="▶", width=3, command=lambda: self._mover(1)).pack(side="left")
-        ttk.Button(top, text="Este mes", command=self._este_mes).pack(side="left", padx=(10, 0))
         self.buscar, self.empleado = tk.StringVar(), tk.StringVar(value=TODOS)
-        ttk.Label(top, text="Buscar", style="Card.TLabel").pack(side="left", padx=(28, 0))
+        ttk.Label(top, text="Buscar", style="Card.TLabel").pack(side="left")
         entry = ttk.Entry(top, textvariable=self.buscar, width=20)
-        entry.pack(side="left", padx=(6, 16))
+        entry.pack(side="left", padx=(6, 18))
         self.buscar.trace_add("write", lambda *_: self._mostrar())
         ttk.Label(top, text="Empleado", style="Card.TLabel").pack(side="left")
-        self.cmb_empleado = Combobox(top, textvariable=self.empleado, state="readonly", width=20)
+        self.cmb_empleado = Combobox(top, textvariable=self.empleado, state="readonly", width=16)
         self.cmb_empleado.pack(side="left", padx=6)
         self.cmb_empleado.bind("<<ComboboxSelected>>", lambda e: self._mostrar())
+        self.periodo = PeriodFilter(top, self.refresh, modo_inicial="Mes")
+        self.periodo.frame.pack(side="right")
 
         self.stats = ttk.Label(card, style="Muted.TLabel")
         self.stats.pack(anchor="w", pady=(10, 8))
@@ -66,7 +61,7 @@ class Arqueo(Screen):
         self.tree.tag_configure("sobra", foreground=theme.OK)
         self.tree.bind("<Double-1>", lambda e: self._detalle() if self.tree.identify_row(e.y) else None)
         self.tree.bind("<<TreeviewSelect>>", lambda e: self._botones())
-        self.vacio = ttk.Label(wrap, text="No hay arqueos en este mes.\nUsá «Nuevo arqueo» o cambiá de mes con las flechas.",
+        self.vacio = ttk.Label(wrap, text="No hay arqueos en este período.\nUsá «Nuevo arqueo» o cambiá el Año, el Mes o las fechas.",
                                style="Muted.TLabel", justify="center")
 
     def build_actions(self, bar):
@@ -79,33 +74,28 @@ class Arqueo(Screen):
         self._botones()
 
     # --- datos ---------------------------------------------------------
-    def _mover(self, paso):
-        m = self.mes.month - 1 + paso
-        self.mes = date(self.mes.year + m // 12, m % 12 + 1, 1)
-        self.refresh()
-
-    def _este_mes(self):
-        self.mes = date.today().replace(day=1)
-        self.refresh()
+    def _en_periodo(self, r):
+        desde, hasta = self.periodo.rango()
+        return (not desde or r["fecha"][:10] >= desde) and (not hasta or r["fecha"][:10] <= hasta)
 
     def refresh(self):
-        self.rows = arqueos.listar()
-        clave = f"{self.mes:%Y-%m}"
-        del_mes = [r for r in self.rows if r["fecha"][:7] == clave]
-        nombres = sorted({n for r in del_mes for n in r["empleados"]})
+        self.rows = arqueos.listar()   # el resultado se arrastra: hacen falta todos, aunque se muestre un período
+        for r in self.rows:   # Buscar encuentra cualquier dato de la fila, tal como se ve
+            r["_texto"] = normalizar(" ".join([fmt_datetime(r["fecha"]), ", ".join(r["empleados"])] + [
+                fmt_money(r[k]) for k in ("cf_val", "cc_val", "sc_val")] + [
+                arqueos.etiqueta(r["variacion"]), arqueos.etiqueta(r["resultado"])]))
+        nombres = sorted({n for r in self.rows if self._en_periodo(r) for n in r["empleados"]})
         self.cmb_empleado.configure(values=[TODOS] + nombres)
         if self.empleado.get() not in [TODOS] + nombres:
             self.empleado.set(TODOS)
-        self.lbl_mes.config(text=f"{MESES[self.mes.month - 1].capitalize()} {self.mes.year}")
         self._mostrar()
 
     def _mostrar(self):
-        clave = f"{self.mes:%Y-%m}"
-        q = self.buscar.get().strip().lower()
+        palabras = normalizar(self.buscar.get()).split()
         emp = self.empleado.get()
-        todas_del_mes = [r for r in self.rows if r["fecha"][:7] == clave]
+        todas_del_mes = [r for r in self.rows if self._en_periodo(r)]
         rows = [r for r in todas_del_mes
-                if (emp in ("", TODOS) or emp in r["empleados"]) and (not q or q in " ".join(r["empleados"]).lower())]
+                if (emp in ("", TODOS) or emp in r["empleados"]) and all(p in r["_texto"] for p in palabras)]
         self.visibles = {str(r["id"]): r for r in rows}
         self.tree.delete(*self.tree.get_children())
         for n, r in enumerate(rows):
@@ -121,7 +111,7 @@ class Arqueo(Screen):
         faltan = sum(1 for r in todas_del_mes if r["variacion"] < -arqueos.EPS)
         sobran = sum(1 for r in todas_del_mes if r["variacion"] > arqueos.EPS)
         ultimo = self.rows[0] if self.rows else None
-        self.stats.config(text=f"{len(todas_del_mes)} arqueos del mes  ·  {faltan} con faltante  ·  {sobran} con sobrante  ·  "
+        self.stats.config(text=f"{len(todas_del_mes)} arqueos del período  ·  {faltan} con faltante  ·  {sobran} con sobrante  ·  "
                                f"{len(todas_del_mes) - faltan - sobran} bien  ·  Resultado actual: "
                                + (arqueos.etiqueta(ultimo["resultado"]) if ultimo else "—"))
         self.count.config(text=f"{len(rows)} arqueo{'' if len(rows) == 1 else 's'}")
@@ -136,7 +126,7 @@ class Arqueo(Screen):
         NuevoArqueo(self.winfo_toplevel(), on_saved=self._guardado)
 
     def _guardado(self):
-        self.mes = date.today().replace(day=1)
+        self.periodo.reset()   # vuelve al mes actual, donde está el arqueo nuevo
         self.refresh()
         if self.tree.get_children():
             self.tree.selection_set(self.tree.get_children()[0])
@@ -235,10 +225,7 @@ class NuevoArqueo(tk.Toplevel):
         self.bind("<Escape>", lambda e: self._cancelar())
         self.protocol("WM_DELETE_WINDOW", self._cancelar)
         self._vista_previa()
-        self.update_idletasks()
-        x = parent.winfo_rootx() + (parent.winfo_width() - self.winfo_width()) // 2
-        y = parent.winfo_rooty() + (parent.winfo_height() - self.winfo_height()) // 3
-        self.geometry(f"+{max(x, 0)}+{max(y, 0)}")
+        arriba(self, parent)
         self.wait_visibility()
         self.grab_set()
         self.lista.focus_set()

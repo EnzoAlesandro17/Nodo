@@ -50,7 +50,7 @@ _ORIGENES = (
     "SELECT g.fecha, 'PORTA', 'porta', g.id, g.nombre, g.numero_portar || ' · ' || p.codigo, 0.0, 1, "
     + _COLS.format(a="g") + " FROM porta g JOIN planes p ON p.id = g.plan_id " + _JOIN.format(a="g") + "WHERE g.activo = 1",
     "SELECT g.fecha, 'BAF', 'baf', g.id, g.nombre, COALESCE(p.codigo, '') || ' · ' || g.estado, 0.0, 1, "   # BAF no tiene sucursal
-    "g.vendedor_id, e.nombre, '' FROM baf g LEFT JOIN planes_baf p ON p.id = g.plan_id "
+    "g.vendedor_id, e.nombre, '' FROM baf g LEFT JOIN planes p ON p.id = g.plan_id "
     "LEFT JOIN empleados e ON e.id = g.vendedor_id WHERE g.activo = 1 AND {baf}",
 )
 _GASTOS = ("SELECT g.fecha, 'GASTO', 'gastos', g.id, g.detalle, g.factura, g.monto, 1, " + _COLS.format(a="g")

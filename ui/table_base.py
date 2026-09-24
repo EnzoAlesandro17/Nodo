@@ -7,7 +7,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 from ui import theme
-from ui.autocomplete import Combobox
+from ui.autocomplete import Combobox, normalizar
 from ui.base import Screen
 from ui.form_dialog import FormDialog
 from ui.formatting import fmt_date, fmt_datetime, fmt_int, fmt_money
@@ -22,9 +22,12 @@ class TableScreen(Screen):
     default_sort, default_desc = "codigo", False
     left_keys = ("descripcion",)      # columnas alineadas a la izquierda (el resto, centradas)
     form_columns = 1                  # columnas de campos del formulario (más de 1 para los muy largos)
+    zebra = True                      # filas alternadas en gris (False si row_tags ya pinta el fondo de cada fila)
+    orden_columnas = ()               # claves de las columnas, si el orden no es el de los campos (formularios por secciones)
 
     def __init__(self, parent):
         self.rows = {}
+        self._todas = []   # filas del filtro y el período elegidos, antes de Buscar: [(fila, texto normalizado)]
         self.sort_key, self.sort_desc = self.default_sort, self.default_desc
         super().__init__(parent)
         self.reload()
@@ -42,6 +45,9 @@ class TableScreen(Screen):
     @property
     def columns(self):
         """Campos que se muestran como columnas de la tabla."""
+        if self.orden_columnas:
+            por_clave = {f.key: f for f in self.fields}
+            return [por_clave[k] for k in self.orden_columnas]
         return [f for f in self.fields if f.kind != "bool" and f.in_table]
 
     # --- construcción --------------------------------------------------
@@ -50,23 +56,24 @@ class TableScreen(Screen):
         top = ttk.Frame(card, style="Inner.TFrame")
         top.pack(fill="x", pady=(0, 12))
 
+        # Un solo renglón: Buscar (en tiempo real, en cualquier dato), el filtro de la tabla y, a la derecha, el período
         ttk.Label(top, text="Buscar", style="Card.TLabel").pack(side="left")
         self.search_var = tk.StringVar()
-        self.search_entry = ttk.Entry(top, textvariable=self.search_var, width=32)
-        self.search_entry.pack(side="left", padx=(8, 24))
-        self.search_var.trace_add("write", lambda *_: self.refresh())
+        self.search_entry = ttk.Entry(top, textvariable=self.search_var, width=20)
+        self.search_entry.pack(side="left", padx=(8, 14))
+        self.search_var.trace_add("write", lambda *_: self._buscar())
 
         filter_field = next(f for f in self.fields if f.key == self.repo.filter_key)
         ttk.Label(top, text=filter_field.label, style="Card.TLabel").pack(side="left")
         self.filter_var = tk.StringVar(value=self.filter_all)
-        self.filter_box = Combobox(top, textvariable=self.filter_var, state="readonly", width=22)
-        self.filter_box.pack(side="left", padx=8)
+        self.filter_box = Combobox(top, textvariable=self.filter_var, state="readonly", width=14)
+        self.filter_box.pack(side="left", padx=(8, 10))
         self.filter_box.bind("<<ComboboxSelected>>", lambda e: self.refresh())
-        ttk.Button(top, text="Limpiar filtros", command=self._clear_filters).pack(side="left", padx=(8, 0))
+        ttk.Button(top, text="Limpiar", command=self._clear_filters).pack(side="left")
 
         if self.fecha_key:
-            self.periodo = PeriodFilter(card, self.refresh)
-            self.periodo.frame.pack(fill="x", pady=(0, 12))
+            self.periodo = PeriodFilter(top, self.refresh)
+            self.periodo.frame.pack(side="right")
 
         wrap = ttk.Frame(card, style="Inner.TFrame")
         wrap.pack(fill="both", expand=True)
@@ -74,7 +81,7 @@ class TableScreen(Screen):
                                  selectmode="browse")
         for f in self.columns:
             anchor = "w" if f.key in self.left_keys else "center"
-            self.tree.heading(f.key, text=f.label, anchor=anchor, command=lambda k=f.key: self._sort(k))
+            self.tree.heading(f.key, text=f.titulo, anchor=anchor, command=lambda k=f.key: self._sort(k))
             self.tree.column(f.key, width=f.width, minwidth=60, stretch=f.stretch, anchor=anchor)
         scroll = ttk.Scrollbar(wrap, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=scroll.set)
@@ -110,23 +117,42 @@ class TableScreen(Screen):
         self.refresh(select)
 
     def refresh(self, select=None):
+        """Vuelve a leer las filas del filtro y el período elegidos, y aplica Buscar."""
         if not self.filter_var.get():   # filtro vaciado (se escribió algo que no es una opción): vuelve a TODOS
             self.filter_var.set(self.filter_all)
         fv = self.filter_var.get()
-        rows = self.repo.list(self.search_var.get(), None if fv == self.filter_all else fv)
+        rows = self.repo.list("", None if fv == self.filter_all else fv)
         if self.fecha_key:
             desde, hasta = self.periodo.rango()
             if desde:
                 rows = [r for r in rows if r[self.fecha_key][:10] >= desde]
             if hasta:
                 rows = [r for r in rows if r[self.fecha_key][:10] <= hasta]
+        self._todas = [(r, self._texto_busqueda(r)) for r in rows]
+        self._buscar(select)
+
+    def _texto_busqueda(self, row):
+        """Todo lo que se puede buscar de una fila: cada campo tal como se ve (también los que no son columna)."""
+        partes = []
+        for f in self.fields:
+            if f.kind in ("bool", "pagos") or f.key not in row:
+                continue
+            partes.append(str(self._display(f, row)))
+            if f.kind in ("money", "int"):   # los números también sin separador de miles: 1500 = 1.500
+                partes.append(str(row[f.key]))
+        return normalizar(" ".join(partes))
+
+    def _buscar(self, select=None):
+        """Muestra las filas que tienen todas las palabras de Buscar (sin importar mayúsculas ni acentos)."""
+        palabras = normalizar(self.search_var.get()).split()
+        rows = [r for r, texto in self._todas if all(p in texto for p in palabras)]
         rows.sort(key=lambda r: self.sort_value(r, self.sort_key), reverse=self.sort_desc)
 
         keep = select if select is not None else self._selected_id()
         self.rows = {r["id"]: r for r in rows}
         self.tree.delete(*self.tree.get_children())
         for i, r in enumerate(rows):
-            self.tree.insert("", "end", iid=str(r["id"]), tags=(("odd",) if i % 2 else ()) + self.row_tags(r),
+            self.tree.insert("", "end", iid=str(r["id"]), tags=(("odd",) if i % 2 and self.zebra else ()) + self.row_tags(r),
                              values=[self._display(f, r) for f in self.columns])
         if keep in self.rows:
             self.tree.selection_set(str(keep))
@@ -160,12 +186,12 @@ class TableScreen(Screen):
         self.sort_desc = not self.sort_desc if key == self.sort_key else False
         self.sort_key = key
         self._update_headings()
-        self.refresh()
+        self._buscar()
 
     def _update_headings(self):
         arrow = " ▼" if self.sort_desc else " ▲"
         for f in self.columns:
-            self.tree.heading(f.key, text=f.label + (arrow if f.key == self.sort_key else ""))
+            self.tree.heading(f.key, text=f.titulo + (arrow if f.key == self.sort_key else ""))
 
     def _clear_filters(self):
         self.search_var.set("")

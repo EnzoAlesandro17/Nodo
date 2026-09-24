@@ -13,8 +13,8 @@ RAIZ = Path(__file__).resolve().parent.parent
 # tabla de cada definición de campos de models.py
 TABLAS = {"accesorios": models.ACCESORIOS, "equipos": models.EQUIPOS, "casim": models.CASIM, "cater": models.CATER,
           "regular": models.REGULAR, "porta": models.PORTA, "baf": models.BAF, "gastos": models.GASTOS,
-          "planes": models.PLANES, "planes_baf": models.PLANES_BAF, "descuentos": models.DESCUENTOS,
-          "tareas": models.TAREAS, "cierres": models.CIERRES, "sucursales": models.SUCURSALES,
+          "planes": models.PLANES, "descuentos": models.DESCUENTOS,
+          "tareas": models.TAREAS, "areas": models.AREAS, "sucursales": models.SUCURSALES,
           "empleados": models.EMPLEADOS, "cuentas": models.CUENTAS, "mov_accesorios": models.MOV_ACCESORIOS,
           "mov_equipos": models.MOV_EQUIPOS}
 
@@ -76,7 +76,10 @@ class BaseReal(BaseTemporal):
 
     def test_m9_rehace_pagos_sin_perder_filas(self):
         """Simula una base vieja (pagos con cuenta opcional y datos) y la pasa por la migración 9."""
-        cuenta = self.db.execute("SELECT id FROM cuentas LIMIT 1").fetchone()[0]
+        fila = self.db.execute("SELECT id FROM cuentas LIMIT 1").fetchone()
+        if fila is None:
+            self.skipTest("la base real no tiene cuentas cargadas")
+        cuenta = fila[0]
         with self.db:
             self.db.execute("DROP TABLE pagos")
             self.db.execute("CREATE TABLE pagos (id INTEGER PRIMARY KEY AUTOINCREMENT, origen TEXT NOT NULL, "

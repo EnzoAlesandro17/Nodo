@@ -4,10 +4,10 @@ from tkinter import ttk
 
 from ui import theme
 from ui.screens import (administracion, arqueo, caja, consultas, cuentas, data, estadisticas, gastos, gestiones,
-                        ingreso_equipos, inicio, movimientos, nuevo, pendientes, stock, tareas, venta_accesorios)
+                        ingreso_equipos, inicio, nuevo, pendientes, stock, tareas, venta_accesorios)
 
-# Estructura del menú, en orden: primero lo que se usa todos los días (cargar, consultar, stock, caja) y al final lo que
-# se toca de vez en cuando (administración y data). Cada valor es una lista de opciones.
+# Estructura del menú, en orden: primero lo que se usa todos los días (cargar, consultar, caja) y al final lo que
+# se toca de vez en cuando (administrar, con el stock, y data). Cada valor es una lista de opciones.
 # Opción: (etiqueta, clase de pantalla[, tecla]) | (etiqueta, [opciones]) = submenú | None = separador
 # La tecla (F2...) abre esa pantalla desde cualquier lado; F1 abre el Inicio.
 MENU = {
@@ -29,30 +29,26 @@ MENU = {
         ("Ventas y gestiones", consultas.Consultas, "F6"),
         ("Estadísticas", estadisticas.Estadisticas, "F7"),
     ],
-    "Stock": [
-        ("Accesorios", stock.StockAccesorios),
-        ("Equipos", stock.StockEquipos),
-        None,
-        ("Movimientos", [
-            ("Accesorios", movimientos.MovAccesorios),
-            ("Equipos", movimientos.MovEquipos),
-        ]),
-        ("Ingreso de equipos", ingreso_equipos.IngresoEquipos),
-    ],
     "Caja": [
         ("Movimientos", caja.Caja, "F5"),
         ("Arqueo de caja", arqueo.Arqueo, "F8"),
     ],
-    "Administración": [
+    "Administrar": [
+        ("Áreas", administracion.Areas),
         ("Sucursales", administracion.Sucursales),
         ("Empleados", administracion.Empleados),
+        None,
         ("Cuentas", cuentas.Cuentas),
+        ("Stock", [   # los movimientos de stock se abren con el botón Movimientos de Accesorios y de Equipos
+            ("Accesorios", stock.StockAccesorios),
+            ("Equipos", stock.StockEquipos),
+            None,
+            ("Ingreso de equipos", ingreso_equipos.IngresoEquipos),
+        ]),
         None,
         ("Planes", administracion.Planes),
-        ("Planes BAF", administracion.PlanesBaf),
         ("Descuentos", administracion.Descuentos),
         None,
-        ("Días cerrados", administracion.Cierres),
         ("Tareas", tareas.Tareas),
     ],
     "Data": [
@@ -94,10 +90,11 @@ class App(tk.Tk):
         super().__init__()
         self.title("Nodo")
         self.minsize(800, 520)
-        w, h = 1000, 650
+        # entran el renglón de Buscar y el período, las columnas de BAF y el Inicio; alto: la pantalla menos la barra
+        # de tareas y el título de la ventana
+        w, h = min(1320, self.winfo_screenwidth() - 40), min(700, self.winfo_screenheight() - 78)
         x = (self.winfo_screenwidth() - w) // 2
-        y = (self.winfo_screenheight() - h) // 2
-        self.geometry(f"{w}x{h}+{x}+{y}")
+        self.geometry(f"{w}x{h}+{x}+0")   # pegada arriba, como las demás ventanas (ui.base.arriba)
         theme.apply(self)
         self.accesos = ACCESOS   # el Inicio los muestra como botones
 

@@ -2,6 +2,13 @@
 from tkinter import ttk
 
 
+def arriba(ventana, parent):
+    """Ubica una ventana nueva pegada al borde de arriba de la pantalla, centrada sobre `parent` a lo ancho."""
+    ventana.update_idletasks()
+    x = parent.winfo_rootx() + (parent.winfo_width() - ventana.winfo_width()) // 2
+    ventana.geometry(f"+{max(x, 0)}+0")
+
+
 class Screen(ttk.Frame):
     title = ""
     subtitle = ""

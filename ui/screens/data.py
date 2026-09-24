@@ -12,11 +12,11 @@ from ui.paths import escritorio
 TABLAS = (
     ("Equipos", stock.equipos),
     ("Accesorios", stock.accesorios),
+    ("Áreas", administracion.areas),        # antes que Sucursales: cada sucursal nombra su área
     ("Sucursales", administracion.sucursales),
     ("Empleados", administracion.empleados),
     ("Cuentas", administracion.cuentas),
     ("Planes", administracion.planes),
-    ("Planes BAF", administracion.planes_baf),
     ("Descuentos", administracion.descuentos),
 )
 
