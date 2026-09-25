@@ -1,0 +1,73 @@
+RODO - notas de Enzo sobre Nodo
+===============================
+(Lo esencial. El detalle de cada decisión y cada carga de datos está en HOJA_DE_RUTA.txt.)
+
+
+QUÉ ES
+------
+La app para llevar la sucursal sin el Excel de la caja: stock, ventas de accesorios, gestiones de Claro
+(CaSIM, CaTER, Regular, Porta, BAF), gastos, caja y arqueo. Idea: presentársela al supervisor como un piloto en
+3ROSARIO, en paralelo con el Excel durante un mes, y mostrar que los números coinciden.
+
+
+USO DIARIO
+----------
+- Abrir:         iniciar_nodo.bat
+- PC nueva:      instalar Python (python.org, tildar "Add to PATH") y correr crear_entorno.bat una vez.
+- Actualizar:    git pull. Al abrir Nodo, la base se actualiza sola a la versión nueva.
+- Respaldo:      Data > Copia de seguridad (se puede con la app abierta). El Inicio avisa si hace más de una semana.
+- Atajos:        F1 Inicio · F2 Venta de accesorios · F3 CaSIM · F4 Gasto · F5 Caja · F6 Ventas y gestiones
+                 F7 Estadísticas · F8 Arqueo
+
+
+OJO
+---
+- La base (data/nodo.db) NO está en git. Cada PC tiene la suya y son distintas:
+    * Casa: septiembre completo (1 al 24/9), las CaTER con sus pagos y las cuentas nuevas. Lo anterior a
+      septiembre se borró el 24/9.
+    * Trabajo: arrancó de cero el 24/9, con parte de septiembre cargada y stock en negativo.
+  Antes de presentar, elegir una sola y copiar el archivo a la otra PC, con la app cerrada. Las dos no se pueden
+  juntar.
+- Nunca poner data/nodo.db directamente en una carpeta de Drive o de OneDrive: si se sincroniza mientras la app
+  escribe, se puede corromper. Siempre subir una copia de seguridad.
+- La rama de trabajo es "areas-filtros-inicio". Todavía no está en main.
+
+
+CUENTAS (cómo se cobró)
+-----------------------
+- GETNET (la terminal del Santander): GETNET QR, GETNET QR DÉBITO, GETNET VISA, GETNET MASTER, GETNET NARANJA,
+  GETNET AMEX. En la Caja, filtrar por GETNET junta todas.
+- CLARO: CLARO FINANCIADO, CLARO QR, CLARO TC-CTI. Esa plata va a Claro: la Caja la muestra en gris pero NO la suma
+  (va aparte, como "Cobrado por Claro"). Se pueden cargar sin monto.
+- Bancos (SANTANDERC, MACROC...): donde se deposita y adonde llega lo de la terminal.
+
+
+PARA REVISAR AHORA
+------------------
+- HG'FILMSM (Hidrogel Filminas Matte) tiene stock -1: seguramente falta cargar una reposición.
+- [cliente] (BAF) aparece en la caja el 23/9 sin estado: quedó Pactada.
+- CaTER: el "efe" de [cliente] y el "Delivery" de [cliente] siguen solo en Observaciones, sin pago cargado.
+
+
+PENDIENTES (por importancia)
+----------------------------
+1. Exportar a la planilla de caja: si el Excel se sigue entregando, Nodo tiene que poder generarlo, o se carga
+   dos veces.
+2. Copia automática a Drive (al cerrar la app y una vez por día, guardando 30 días). Primero definir la cuenta de
+   Google: que sea de la empresa, no la personal.
+3. Cierre del día por cuenta: cuánto efectivo y cuánto por tarjeta debería haber.
+4. Transfer: de plata (entre cuentas o a un banco) y de mercadería (a otra sucursal, con confirmación al recibir).
+5. Conciliación de stock: una pantalla con una columna "Contado" al lado del stock.
+6. Usuarios, permisos y registro de quién hizo qué (se puede tomar el login de AppEmar).
+7. Vista del supervisor: juntar las copias de todas las sucursales.
+8. Novedades desde RRHH (empleados, planes) a través de una carpeta compartida: se aplican solas y avisan.
+9. Detalles: completar las gestiones (ID, DNI, NIM...), asignar su sucursal a 8 vendedores, corregir 5CORRIENTES,
+   intereses en CaTER.
+
+
+PREGUNTAS QUE VA A HACER EL SUPERVISOR
+--------------------------------------
+- ¿Veo todas las sucursales juntas? (Hoy no: ver pendiente 7.)
+- ¿Qué pasa si se rompe la PC? (Copias: ver pendiente 2.)
+- ¿Quién hizo cada cosa? (Ver pendiente 6.)
+- ¿Quién lo mantiene y cómo se instala?
