@@ -3,6 +3,7 @@ from tkinter import ttk
 import tkinter as tk
 
 from db import caja
+from db.administracion import cuentas
 from ui import theme
 from ui.autocomplete import Combobox, normalizar
 from ui.base import Screen
@@ -18,6 +19,7 @@ class Caja(Screen):
 
     def __init__(self, parent):
         self.rows = []   # las filas del período (antes de filtrar por tipo, cuenta o sucursal)
+        self.padre = {}  # {subcuenta: cuenta padre}
         super().__init__(parent)
         self.refresh()
 
@@ -62,6 +64,7 @@ class Caja(Screen):
         self.tree.tag_configure("odd", background=theme.ZEBRA)
         self.tree.tag_configure("gasto", foreground=theme.DANGER)
         self.tree.tag_configure("interes", foreground=theme.MUTED)
+        self.tree.tag_configure("claro", foreground=theme.MUTED)   # se registra, pero no suma
 
     def build_actions(self, bar):
         ttk.Button(bar, text="Actualizar", style="Accent.TButton", command=self.refresh).pack(side="left")
@@ -72,11 +75,15 @@ class Caja(Screen):
     def refresh(self):
         desde, hasta = self.periodo.rango()
         self.rows = caja.movimientos(desde, hasta)
+        self.padre = cuentas.padre_por_codigo()   # filtrar por GETNET muestra todas sus subcuentas
         for r in self.rows:   # Buscar encuentra cualquier dato de la fila, tal como se ve
             r["_texto"] = normalizar(" ".join((fmt_datetime(r["fecha"]), r["tipo"], fmt_money(r["monto"]), str(r["monto"]),
                                                r["cuenta"], r["vendedor"], r["sucursal"], r["detalle"])))
         for text, key in (("Tipo", "tipo"), ("Cuenta", "cuenta"), ("Sucursal", "sucursal")):
-            values = [TODOS] + sorted({r[key] for r in self.rows if r[key]})
+            valores = {r[key] for r in self.rows if r[key]}
+            if key == "cuenta":
+                valores |= {self.padre[c] for c in valores if c in self.padre}
+            values = [TODOS] + sorted(valores)
             self.boxes[text].configure(values=values)
             var = {"Tipo": self.tipo, "Cuenta": self.cuenta, "Sucursal": self.sucursal}[text]
             if var.get() not in values:
@@ -89,15 +96,19 @@ class Caja(Screen):
                 var.set(TODOS)
         filtros = {"tipo": self.tipo.get(), "cuenta": self.cuenta.get(), "sucursal": self.sucursal.get()}
         palabras = normalizar(self.buscar.get()).split()
-        rows = [r for r in self.rows if all(v == TODOS or r[k] == v for k, v in filtros.items())
+        rows = [r for r in self.rows if all(v == TODOS or r[k] == v or (k == "cuenta" and self.padre.get(r[k]) == v)
+                                            for k, v in filtros.items())
                 and all(p in r["_texto"] for p in palabras)]
         self.tree.delete(*self.tree.get_children())
         for n, r in enumerate(rows):
             tags = (("odd",) if n % 2 else ()) + (("gasto",) if r["tipo"] == caja.TIPO_GASTO else
-                                                  ("interes",) if r["tipo"] == caja.TIPO_INTERESES else ())
+                                                  ("interes",) if r["tipo"] == caja.TIPO_INTERESES else
+                                                  ("claro",) if r["fuera_de_caja"] else ())
             self.tree.insert("", "end", tags=tags, values=(fmt_datetime(r["fecha"]), r["tipo"], fmt_money(r["monto"]),
                                                           r["cuenta"], r["vendedor"], r["sucursal"], r["detalle"]))
         ventas, intereses, gastos, neto = caja.totales(rows)
+        claro = caja.fuera_de_caja(rows)
         self.totales.config(
             text=f"{len(rows)} movimientos  ·  Ventas {fmt_money(ventas)}  ·  Gastos {fmt_money(gastos)}  ·  "
-                 f"Neto {fmt_money(neto)}  ·  Intereses (aparte) {fmt_money(intereses)}", foreground=theme.MUTED)
+                 f"Neto {fmt_money(neto)}  ·  Intereses (aparte) {fmt_money(intereses)}"
+                 + (f"  ·  Cobrado por Claro (no suma) {fmt_money(claro)}" if claro else ""), foreground=theme.MUTED)

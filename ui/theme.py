@@ -1,22 +1,31 @@
-"""Colores, fuentes y estilos ttk compartidos por toda la app."""
+"""Colores, fuentes y estilos ttk compartidos por toda la app.
+
+La paleta sale del design-system (proyectos/design-system, modo claro). Verde y rojo quedan más oscuros que los
+de la paleta porque acá se usan como color de texto (sobra/falta) y los de la paleta se leen mal sobre blanco.
+"""
+from pathlib import Path
+import tkinter as tk
 from tkinter import ttk
 
-BG = "#f3f4f6"          # fondo general
-SURFACE = "#ffffff"     # tarjetas
-BAR = "#1f2937"         # barra superior
-BAR_HOVER = "#374151"
-BAR_FG = "#f9fafb"
-ACCENT = "#2563eb"
-ACCENT_HOVER = "#1d4ed8"
-TEXT = "#111827"
-MUTED = "#6b7280"
-BORDER = "#e5e7eb"
+BG = "#F0F0F0"          # fondo general (fondo secundario de la paleta)
+SURFACE = "#FFFFFF"     # tarjetas
+BAR = "#323332"         # barra superior (texto principal de la paleta)
+BAR_HOVER = "#4A4B4A"
+BAR_FG = "#F9FAFB"
+ACCENT = "#2E5FC7"      # primario
+ACCENT_HOVER = "#244FA8"
+ACCENT_SOFT = "#E6F0FF"  # fondo sutil / hover
+TEXT = "#323332"
+MUTED = "#6B7280"
+BORDER = "#CBD1D9"
 DANGER = "#dc2626"
 OK = "#15803d"          # verde: sobra, bien
-ZEBRA = "#f9fafb"
+ZEBRA = "#F7F8FA"
 FILA_OK = "#dcfce7"      # fondos de fila por estado: verde (hecho), rojo (cancelado), amarillo (en curso)
 FILA_MAL = "#fee2e2"
 FILA_PENDIENTE = "#fef9c3"
+
+ICONOS = Path(__file__).resolve().parent.parent / "assets"
 
 FONT = ("Segoe UI", 10)
 FONT_BOLD = ("Segoe UI", 10, "bold")
@@ -25,8 +34,19 @@ FONT_SUB = ("Segoe UI", 10)
 FONT_BAR = ("Segoe UI", 11)
 
 
+def poner_icono(root):
+    """El monograma del design-system como ícono de la ventana y de la barra de tareas."""
+    try:
+        imgs = [tk.PhotoImage(master=root, file=ICONOS / f"icono-{s}.png") for s in (256, 48, 32, 16)]
+    except (tk.TclError, OSError):
+        return   # sin los PNG la app arranca igual, con el ícono de Tk
+    root.iconphoto(True, *imgs)
+    root._iconos = imgs   # que no los libere el recolector
+
+
 def apply(root):
     root.configure(bg=BG)
+    poner_icono(root)
     style = ttk.Style(root)
     style.theme_use("clam")
 
@@ -41,10 +61,10 @@ def apply(root):
     style.configure("Muted.TLabel", background=SURFACE, foreground=MUTED)
 
     style.configure("TButton", padding=(14, 7), background=SURFACE, bordercolor=BORDER)
-    style.map("TButton", background=[("active", BORDER)])
+    style.map("TButton", background=[("active", ACCENT_SOFT)])
     style.configure("Accent.TButton", background=ACCENT, foreground="white",
                     bordercolor=ACCENT, font=FONT_BOLD)
-    style.map("Accent.TButton", background=[("active", ACCENT_HOVER), ("disabled", "#93c5fd")],
+    style.map("Accent.TButton", background=[("active", ACCENT_HOVER), ("disabled", "#9DB4E6")],
               foreground=[("disabled", "white")])
 
     style.configure("Danger.TButton", background=DANGER, foreground="white",
@@ -57,11 +77,11 @@ def apply(root):
     style.configure("Treeview", rowheight=30, background=SURFACE, fieldbackground=SURFACE,
                     bordercolor=BORDER, font=FONT)
     style.map("Treeview", background=[("selected", ACCENT)], foreground=[("selected", "white")])
-    style.configure("Treeview.Heading", font=FONT_BOLD, background="#f9fafb", padding=(8, 8),
+    style.configure("Treeview.Heading", font=FONT_BOLD, background=ZEBRA, padding=(8, 8),
                     relief="flat", bordercolor=BORDER)
-    style.map("Treeview.Heading", background=[("active", BORDER)])
+    style.map("Treeview.Heading", background=[("active", ACCENT_SOFT)])
     root.option_add("*TCombobox*Listbox.font", FONT)
 
     style.configure("TEntry", padding=6, fieldbackground=SURFACE, bordercolor=BORDER)
     style.configure("TCombobox", padding=6, fieldbackground=SURFACE, bordercolor=BORDER)
-    style.configure("Status.TLabel", background=BORDER, foreground=MUTED, padding=(12, 4))
+    style.configure("Status.TLabel", background=BORDER, foreground=TEXT, padding=(12, 4))

@@ -12,11 +12,15 @@ Orígenes:
                     gestionado en el día
   INTERESES         lo que el posnet cobró de más por las cuotas
   GASTO             Nuevo > Gasto
+
+Las filas de una cuenta de Claro (models.TIPO_FUERA_DE_CAJA) llevan `fuera_de_caja`: se ven, para saber cómo se cobró,
+pero esa plata va a Claro y no suma en los totales (ver fuera_de_caja()).
 """
 import calendar
 from datetime import date, timedelta
 
 from db import connection
+from db.administracion import cuentas
 
 TIPO_GASTO, TIPO_INTERESES = "GASTO", "INTERESES"
 
@@ -80,18 +84,26 @@ def movimientos(desde=None, hasta=None):
            "COALESCE(detalle, '') AS detalle FROM (" + " UNION ALL ".join(_ORIGENES) + ")"
            + (f" WHERE {' AND '.join(where)}" if where else "") + " ORDER BY fecha DESC, tipo")
     rows = [dict(r) for r in connection.get().execute(sql, params)]
+    de_claro = set(cuentas.fuera_de_caja().values())
     for r in rows:
         r["monto"] = round(r["monto"] or 0.0, 2)
+        r["fuera_de_caja"] = r["cuenta"] in de_claro
     return rows
 
 
 def totales(rows):
     """(ventas, intereses, gastos, neto) de las filas: el neto es lo vendido menos los gastos (sin los intereses).
-    Los gastos vienen en positivo."""
+    Los gastos vienen en positivo. Lo cobrado por Claro no cuenta (ver fuera_de_caja)."""
+    rows = [r for r in rows if not r.get("fuera_de_caja")]
     intereses = round(sum(r["monto"] for r in rows if r["tipo"] == TIPO_INTERESES), 2)
     gastos = round(-sum(r["monto"] for r in rows if r["tipo"] == TIPO_GASTO), 2)
     ventas = round(sum(r["monto"] for r in rows if r["tipo"] not in (TIPO_INTERESES, TIPO_GASTO)), 2)
     return ventas, intereses, gastos, round(ventas - gastos, 2)
+
+
+def fuera_de_caja(rows):
+    """Lo cobrado por Claro en las filas: se muestra aparte, no es plata de nuestra caja."""
+    return round(sum(r["monto"] for r in rows if r.get("fuera_de_caja")), 2)
 
 
 def _info_mes(anio, mes):

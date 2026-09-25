@@ -73,7 +73,29 @@ EQUIPOS = (
     Field("virtual", "Virtual (sin stock)", kind="bool", disables="stock"),   # 1 = la E-SIM
 )
 
-MEDIOS_COBRO = ("EFE", "VISA", "MASTER", "MAESTRO", "AMEX", "NARANJA", "CONSUMAX", "QR")   # EFE = efectivo
+# Cuentas de este tipo registran cómo se cobró algo cuya plata va a Claro, no a nuestra caja: la Caja las muestra pero
+# no las suma, y un pago a una de ellas puede ir sin monto (FINANCIADO y QR no suelen tenerlo).
+TIPO_FUERA_DE_CAJA = "CLARO"
+
+# Cuentas de cobro con subcuentas: la terminal (o Claro) y con qué se cobró. El código de cada subcuenta empieza con
+# el de su cuenta padre (GETNET VISA), así se entiende aunque se vea sola. (padre, tipo, descripción, subcuentas),
+# y cada subcuenta: (código, descripción, código que tenía antes de las subcuentas).
+CUENTAS_DE_COBRO = (
+    ("GETNET", "TERMINAL", "TERMINAL DE COBRO GETNET (SANTANDER)", (
+        ("GETNET QR", "QR", "QR"),
+        ("GETNET QR DÉBITO", "QR CON DÉBITO", "QR-DEBITO"),
+        ("GETNET VISA", "VISA", "VISA"),
+        ("GETNET MASTER", "MASTERCARD", "MASTER"),
+        ("GETNET NARANJA", "NARANJA", "NARANJA"),
+        ("GETNET AMEX", "AMERICAN EXPRESS", "AMEX"))),
+    ("CLARO", TIPO_FUERA_DE_CAJA, "COBRADO POR CLARO (NO PASA POR NUESTRA CAJA)", (
+        ("CLARO FINANCIADO", "CONTRAFACTURA", "FINANCIADO"),
+        ("CLARO QR", "QR DE CLARO", "QR-CLARO"),
+        ("CLARO TC-CTI", "DÉBITO O CRÉDITO EN LA TERMINAL DE CLARO", "TC-CTI"))),
+)
+
+# medio de cobro de una venta suelta de Stock > Movimientos: efectivo o una subcuenta de nuestra terminal
+MEDIOS_COBRO = ("EFE",) + tuple(codigo for codigo, *_ in CUENTAS_DE_COBRO[0][3])
 
 # Gestiones (menú Nuevo > Gestiones). Cada una es una tabla propia con este formato.
 CASIM = (
@@ -287,6 +309,7 @@ CUENTAS = (
     Field("tipo", "Tipo", kind="choice", required=True, width=150),
     Field("descripcion", "Descripción", required=True, width=320, stretch=True),
     Field("saldo_inicial", "Saldo inicial", kind="money", width=130),
+    Field("padre_id", "Subcuenta de", kind="select", ref="cuentas", width=110),   # p. ej. GETNET VISA, de GETNET
 )
 
 # Movimientos de stock (Stock > Movimientos). Misma planilla para accesorios y equipos.

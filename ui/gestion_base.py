@@ -2,6 +2,7 @@
 from tkinter import messagebox
 
 from db import refs, stock
+from db.administracion import cuentas
 from ui.formatting import fmt_money
 from ui.table_base import TableScreen
 
@@ -22,7 +23,8 @@ class GestionScreen(TableScreen):
             if f.kind in ("select", "multi"):
                 choices[f.key] = refs.choices(f.ref, self.ref_filters.get(f.key))
             elif f.kind == "pagos":
-                choices[f.key] = refs.codigos(f.ref)
+                choices[f.key] = refs.codigos(f.ref, para_elegir=True)
+                choices[f.key + ":sin_monto"] = set(cuentas.fuera_de_caja())   # Claro: se puede registrar sin monto
         return choices
 
     def _confirm_stock(self, data, anterior=None):

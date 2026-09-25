@@ -65,7 +65,8 @@ class FormDialog(tk.Toplevel):
             label.grid(row=r, column=lc, sticky="nw" if f.kind == "pagos" else "w",
                        padx=(0 if lc == 0 else 28, 18), pady=(6, 3) if f.kind == "pagos" else 3)
             if f.kind == "pagos":
-                self._build_pagos(body, r, f, values.get(f.key, []) if values else [], choices.get(f.key, []))
+                self._build_pagos(body, r, f, values.get(f.key, []) if values else [], choices.get(f.key, []),
+                                  choices.get(f.key + ":sin_monto", set()))
                 continue
             if f.kind == "multi":
                 self._build_multi(body, r, f, choices.get(f.key, []), values.get(f.key, []) if values else [])
@@ -165,10 +166,11 @@ class FormDialog(tk.Toplevel):
 
         box.bind("<<ComboboxSelected>>", on_select)
 
-    def _build_pagos(self, body, row, field, initial, options):
+    def _build_pagos(self, body, row, field, initial, options, sin_monto=()):
         """Pagos combinados: se elige la cuenta y el monto, «Agregar», y se puede agregar otro.
 
-        `options`: [(id, código)] de las cuentas; `initial`: [(id, monto, código)] de lo ya guardado.
+        `options`: [(id, código)] de las cuentas; `initial`: [(id, monto, código)] de lo ya guardado; `sin_monto`: ids de
+        las cuentas que aceptan un pago sin monto (las de Claro: solo registran cómo se cobró).
         """
         nombres = {cid: codigo for cid, codigo in options}
         nombres.update({cid: codigo for cid, _, codigo in initial})   # también las cuentas dadas de baja
@@ -208,7 +210,7 @@ class FormDialog(tk.Toplevel):
         def refresh():
             lista.delete(0, "end")
             for cid, v in pagos:
-                lista.insert("end", f"{nombres.get(cid, '?')}   ·   {fmt_money(v)}")
+                lista.insert("end", f"{nombres.get(cid, '?')}   ·   {fmt_money(v) if v else 'sin monto'}")
             resumen.config(text=f"Pagado {fmt_money(pagado())} de {fmt_money(total())}",
                            foreground=theme.DANGER if pagos and pagado() != total() else theme.MUTED)
 
@@ -218,7 +220,8 @@ class FormDialog(tk.Toplevel):
                 valor = parse_money(monto.get())
             except ValueError:
                 valor = 0
-            if cuenta.get() not in ids or valor <= 0:
+            sin = cuenta.get() in ids and ids[cuenta.get()] in sin_monto
+            if cuenta.get() not in ids or valor < 0 or (valor == 0 and not sin):
                 self.error.config(text="Pagos: elegí la cuenta y un monto mayor a 0.")
                 return "break"
             pagos.append((ids[cuenta.get()], valor))

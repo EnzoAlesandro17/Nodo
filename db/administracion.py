@@ -1,7 +1,7 @@
 """Repositorios de Administración: áreas, sucursales, empleados y cuentas."""
 from db import refs
 from db.repo import AMBIGUO, Repo, _like_escape
-from models import AREAS, CUENTAS, DESCUENTOS, EMPLEADOS, PLANES, SUCURSALES
+from models import AREAS, CUENTAS, DESCUENTOS, EMPLEADOS, PLANES, SUCURSALES, TIPO_FUERA_DE_CAJA
 
 
 class SucursalRepo(Repo):
@@ -116,9 +116,45 @@ class EmpleadoRepo(Repo):
         self._set_sucursales(row_id, data["sucursales"])
 
 
+class CuentaRepo(Repo):
+    """Cuentas con subcuentas en dos niveles: GETNET (la terminal) > GETNET VISA, GETNET QR... Los pagos van a una subcuenta
+    (o a una cuenta suelta, como EFE); la cuenta padre sirve para agrupar (filtro de la Caja)."""
+
+    def list(self, search="", filter_value=None):
+        rows = super().list(search, filter_value)
+        codigo = dict(self._db.execute("SELECT id, codigo FROM cuentas").fetchall())
+        for row in rows:
+            row["padre_id_label"] = codigo.get(row["padre_id"], "")
+        return rows
+
+    def padres(self):
+        """Ids de las cuentas que tienen alguna subcuenta activa: no se ofrecen para cobrar ni para pagar."""
+        return {r[0] for r in self._db.execute("SELECT DISTINCT padre_id FROM cuentas WHERE activo = 1 AND padre_id IS NOT NULL")}
+
+    def fuera_de_caja(self):
+        """{id: código} de las cuentas de Claro (TIPO_FUERA_DE_CAJA): se registran, pero no suman en la Caja."""
+        return dict(self._db.execute("SELECT id, codigo FROM cuentas WHERE tipo = ?", (TIPO_FUERA_DE_CAJA,)).fetchall())
+
+    def padre_por_codigo(self):
+        """{código de la subcuenta: código de su cuenta padre}."""
+        return dict(self._db.execute("SELECT h.codigo, p.codigo FROM cuentas h JOIN cuentas p ON p.id = h.padre_id").fetchall())
+
+    def check_padre(self, row_id, padre_id):
+        """Error si `padre_id` no puede ser la cuenta padre de la cuenta `row_id` (None si es un alta), o None."""
+        if not padre_id:
+            return None
+        if padre_id == row_id:
+            return "Una cuenta no puede ser subcuenta de sí misma."
+        if self._db.execute("SELECT padre_id FROM cuentas WHERE id = ?", (padre_id,)).fetchone()[0]:
+            return "Esa cuenta ya es una subcuenta: elegí la cuenta padre (solo hay dos niveles)."
+        if row_id and row_id in self.padres():
+            return "Esta cuenta tiene subcuentas: no puede ser, a la vez, subcuenta de otra."
+        return None
+
+
 areas = Repo("areas", AREAS, filter_key="codigo")
 sucursales = SucursalRepo("sucursales", SUCURSALES, filter_key="area_id")
-cuentas = Repo("cuentas", CUENTAS, filter_key="tipo")
+cuentas = CuentaRepo("cuentas", CUENTAS, filter_key="tipo")
 empleados = EmpleadoRepo("empleados", EMPLEADOS, filter_key="rol")
 planes = Repo("planes", PLANES, filter_key="categoria",   # el filtro por categoría separa los de líneas de los de BAF
               order="categoria, CAST(codigo AS INTEGER), codigo")   # 2GB antes que 10GB

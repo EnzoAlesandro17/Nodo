@@ -3,6 +3,8 @@ import os
 import sqlite3
 from pathlib import Path
 
+from models import CUENTAS_DE_COBRO
+
 DEFAULT_PATH = Path(__file__).resolve().parent.parent / "data" / "nodo.db"
 
 # IMEI de los equipos: una fila por unidad. No mueve stock (el stock se mueve en los movimientos).
@@ -298,6 +300,7 @@ CREATE TABLE IF NOT EXISTS cuentas (
     tipo          TEXT NOT NULL,
     descripcion   TEXT NOT NULL,
     saldo_inicial REAL NOT NULL DEFAULT 0,
+    padre_id      INTEGER REFERENCES cuentas(id),   -- subcuenta de (p. ej. VISA de GETNET); vacío = cuenta suelta o padre
     activo        INTEGER NOT NULL DEFAULT 1
 );
 
@@ -392,6 +395,28 @@ def _sembrar_planes_baf(conn):
 def _sembrar_planes_fibra(conn):
     """Base nueva: los planes de fibra vigentes, como planes de categoría BAF."""
     conn.executemany("INSERT INTO planes (codigo, categoria, descripcion) VALUES (?, 'BAF', ?)", PLANES_FIBRA)
+
+
+def _sembrar_cuentas_de_cobro(conn):
+    """Crea las cuentas padre y las subcuentas de CUENTAS_DE_COBRO que falten. Una subcuenta que ya estaba con su
+    código anterior (VISA, FINANCIADO...) se renombra, conserva su id (y sus pagos) y pasa a colgar de su padre; el medio
+    de cobro de los movimientos con el código anterior (VISA, QR...) también, aunque no fuera una cuenta. Se puede repetir sin cambiar nada."""
+    def buscar(codigo):
+        row = conn.execute("SELECT id FROM cuentas WHERE codigo = ?", (codigo,)).fetchone()
+        return row[0] if row else None
+    for padre, tipo, descripcion, hijas in CUENTAS_DE_COBRO:
+        padre_id = buscar(padre) or conn.execute("INSERT INTO cuentas (codigo, tipo, descripcion) VALUES (?, ?, ?)",
+                                                 (padre, tipo, descripcion)).lastrowid
+        conn.execute("UPDATE cuentas SET tipo = ?, descripcion = ?, padre_id = NULL WHERE id = ?", (tipo, descripcion, padre_id))
+        for codigo, desc_hija, anterior in hijas:
+            if buscar(codigo) is None and buscar(anterior) is not None:
+                conn.execute("UPDATE cuentas SET codigo = ? WHERE id = ?", (codigo, buscar(anterior)))
+            for tabla in ("mov_accesorios", "mov_equipos"):   # el medio es texto: se renombra aunque no fuera una cuenta
+                conn.execute(f"UPDATE {tabla} SET medio = ? WHERE medio = ?", (codigo, anterior))
+            if buscar(codigo) is None:
+                conn.execute("INSERT INTO cuentas (codigo, tipo, descripcion) VALUES (?, ?, ?)", (codigo, tipo, desc_hija))
+            conn.execute("UPDATE cuentas SET tipo = ?, descripcion = ?, padre_id = ? WHERE codigo = ?",
+                         (tipo, desc_hija, padre_id, codigo))
 
 
 def _migrar_planes(conn):
@@ -632,12 +657,20 @@ def _m13_sin_dias_cerrados(conn):
     conn.execute("DROP TABLE IF EXISTS cierres")
 
 
+def _m14_subcuentas(conn):
+    """Cuentas con subcuentas (padre_id): la terminal GETNET con GETNET QR, GETNET QR DÉBITO, GETNET VISA, GETNET MASTER,
+    GETNET NARANJA y GETNET AMEX; CLARO con CLARO FINANCIADO, CLARO QR y CLARO TC-CTI (ver models.CUENTAS_DE_COBRO)."""
+    if "padre_id" not in _columnas(conn, "cuentas"):
+        conn.execute("ALTER TABLE cuentas ADD COLUMN padre_id INTEGER REFERENCES cuentas(id)")
+    _sembrar_cuentas_de_cobro(conn)
+
+
 MIGRACIONES = [_m1_bases_anteriores_al_control_de_version, _m2_pagos_de_ventas_dadas_de_baja,
                _m3_ventas_con_varios_productos_e_intereses, _m4_regular_y_porta_descuentan_sim,
                _m5_empleados_mail_y_nacimiento, _m6_porta_fecha_portacion, _m7_chips_a_equipos,
                _m8_gastos_rubro, _m9_pagos_con_cuenta_obligatoria, _m10_sucursales_por_area,
                _m11_sucursales_direccion_y_telefono, _m12_planes_unificados_con_categoria,
-               _m13_sin_dias_cerrados]
+               _m13_sin_dias_cerrados, _m14_subcuentas]
 
 
 def _migrar(conn):

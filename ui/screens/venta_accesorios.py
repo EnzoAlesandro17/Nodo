@@ -158,7 +158,7 @@ class Accesorios(Screen):
         self.mayus = [label.upper() for label in self.labels]
         self.opciones = {"sucursal": {label: i for i, label in refs.choices("sucursales")},
                          "vendedor": {label: i for i, label in refs.choices("empleados")}}
-        self.cuentas = {codigo: i for i, codigo in refs.codigos("cuentas")}
+        self.cuentas = {codigo: i for i, codigo in refs.codigos("cuentas", para_elegir=True)}
 
     def _coincidencias(self, texto):
         tokens = texto.upper().split()

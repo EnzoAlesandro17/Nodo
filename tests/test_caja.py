@@ -169,3 +169,20 @@ class CajaBaseReal(BaseTemporal):
             self.assertRegex(r["fecha"], r"^\d{4}-\d{2}-\d{2}( \d{2}:\d{2}:\d{2})?$", r)
             self.assertIsInstance(r["monto"], float, r)
             self.assertTrue(r["tipo"], r)
+
+
+class TestCobradoPorClaro(BaseTemporal):
+    """Lo cobrado con una cuenta de Claro se ve en la Caja, pero no suma: esa plata va a Claro."""
+
+    def test_se_ve_pero_no_suma(self):
+        self.sembrar()   # FINANCIADO es de tipo CLARO
+        cater.insert({"fecha": f"{DIA} 13:00:00", "nombre": "GOMEZ, ANA", "numero": "3415550001", "equipo_id": self.celu,
+                      "imei": "", "monto": 300000, "pagos": [(self.efe, 100000), (self.fin, 200000)],
+                      "vendedor_id": self.emp, "sucursal_id": self.suc, "observaciones": ""})
+        cater.insert({"fecha": f"{DIA} 14:00:00", "nombre": "PEREZ", "numero": "3415550002", "equipo_id": self.celu,
+                      "imei": "", "monto": 0, "pagos": [(self.fin, 0)],   # financiado sin monto: solo el registro
+                      "vendedor_id": self.emp, "sucursal_id": self.suc, "observaciones": ""})
+        rows = caja.movimientos(DIA, DIA)
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(caja.totales(rows), (100000, 0, 0, 100000))
+        self.assertEqual(caja.fuera_de_caja(rows), 200000)
