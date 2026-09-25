@@ -122,7 +122,7 @@ class BAF(GestionScreen):
             parent.config(cursor="")
         webbrowser.open(url)
         aviso = ("Se abrió el formulario con los datos precargados. Revisalo, completá lo que falte y envialo.\n\n"
-                 "Quedan para completar a mano: Estado, Acometimientos y las de portabilidad. Y tildá "
+                 "Quedan para completar a mano: Acometimientos y las de portabilidad. Y tildá "
                  "«Enviarme una copia de mis respuestas».")
         for texto in avisos:
             aviso += "\n\n" + texto

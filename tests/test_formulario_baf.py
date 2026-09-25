@@ -26,6 +26,7 @@ PREGUNTAS = {
     "SERVICIO": (14, ["Duo", "Triple", "Duo CUIT", "Triple CUIT", "Añadir TV"]),
     "PLAN": (15, ["200 MB", "500 MB", "800 MB", "200 MB + TV", "500 MB + TV", "800 MB + TV"]),
     "DECOS": (16, ["1", "2", "3"]),
+    "ESTADO": (21, ["Solicitud de preventa", "No le interesa el servicio", "No contesta"]),
     "OBSERVACIONES": (17, []),
 }
 
@@ -59,6 +60,7 @@ class FormularioBaf(unittest.TestCase):
         self.assertEqual(r["entry.15"], "500 MB")
         self.assertEqual(r["entry.17"], "OT1 SDS2 30/09/2026 PM")
         self.assertEqual(r["entry.1"], "Local")
+        self.assertEqual(r["entry.21"], "Solicitud de preventa")
         self.assertEqual(r["entry.19"], "emarceiba3rosario@gmail.com")   # el del local, no el del cliente
         self.assertNotIn("entry.16", r)   # sin TV, sin decos
 

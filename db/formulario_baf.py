@@ -5,8 +5,8 @@ El link se guarda en ajustes (cambia cada mes). Las preguntas se leen del propio
 reconocen por su título (no por su número interno), así que un formulario nuevo con las mismas preguntas
 sigue andando. En las preguntas de opciones solo se precarga un valor que coincida con una opción; si no, queda
 vacía para completarla a mano. Una pregunta nueva que Nodo no conoce queda vacía; una que Nodo precarga y ya no
-está en el formulario (p. ej. porque le cambiaron el título) se avisa. Estado, Acometimientos y las de portabilidad
-quedan vacías. "Enviarme una copia de mis respuestas" no se puede tildar desde el link: se tilda a mano.
+está en el formulario (p. ej. porque le cambiaron el título) se avisa. Acometimientos y las de portabilidad quedan
+vacías. "Enviarme una copia de mis respuestas" no se puede tildar desde el link: se tilda a mano.
 """
 import json
 import re
@@ -20,6 +20,7 @@ from ui.formatting import fmt_date
 CLAVE = "formulario_baf"   # clave del link en ajustes
 MODO = "Local"                              # las BAF se cargan desde el local
 MAIL = "emarceiba3rosario@gmail.com"        # en el formulario va siempre el mail del local, no el del cliente
+ESTADO = "Solicitud de preventa"            # el estado con que se carga toda venta de BAF
 
 
 class FormularioError(Exception):
@@ -112,6 +113,7 @@ def respuestas(row):
         "SERVICIO": ("Triple" if _hay_tv(row) else "Duo") + (" CUIT" if _es_cuit(row) else ""),
         "PLAN": _plan(row),
         "DECOS": row["cantidad_tv"] if _hay_tv(row) else "",
+        "ESTADO": ESTADO,
         "OBSERVACIONES": observaciones,
     }
 
