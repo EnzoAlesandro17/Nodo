@@ -37,7 +37,7 @@ clientes, montos de operaciones ni datos de la base.
   * BAF con observación INSTALADA -> la BAF existente pasa a Instalada con esa fecha.
 - Hoja CajaAcc: las ventas "Consumidor final" -> movimiento VENTA de accesorios: código de barras (sin distinguir
   mayúsculas), Cant, INGRESO (precio unitario), MODO -> GETNET + la tarjeta (efe -> EFE), Nº = cupón.
-- La caja no tiene hora: fecha a las 00:00. Antes de cargar, comparar por (fecha, número) con lo que ya está: la
+- La caja no tiene hora: fecha a las 11:00, la apertura del local. Antes de cargar, comparar por (fecha, número) con lo que ya está: la
   planilla corrige números de días anteriores.
 
 ## Convenciones
