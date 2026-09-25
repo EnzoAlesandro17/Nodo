@@ -23,11 +23,11 @@ USO DIARIO
 OJO
 ---
 - La base (data/nodo.db) NO está en git, y no tiene que estarlo: tiene datos de clientes.
-- La base buena es la de casa: septiembre completo (1 al 24/9). Lo anterior a septiembre se borró el 24/9.
-  La del trabajo quedó vieja: hay que reemplazarla por la de casa.
+- La base buena es la del trabajo (desde el 25/9). La de casa ya no se usa: borrarla.
 - Nunca poner data/nodo.db directamente en una carpeta de Drive o de OneDrive: si se sincroniza mientras la app
   escribe, se puede corromper. Siempre subir una copia de seguridad.
-- La rama de trabajo es "areas-filtros-inicio". Todavía no está en main.
+- Se trabaja directo en main (etapa de desarrollo inicial).
+- Las CaSIM no se cobran: van sin monto ni cuenta.
 
 
 CUENTAS (cómo se cobró)
@@ -45,6 +45,9 @@ PARA REVISAR AHORA
   CaTER sin el modelo del equipo, accesorios con stock negativo).
 - HG'FILMSM (Hidrogel Filminas Matte) tiene stock -1: seguramente falta cargar una reposición.
 - Dos CaTER tienen el pago solo en Observaciones ("efe" sin monto y "Delivery"): completar el pago.
+- La USIM tiene stock negativo: faltan cargar los ingresos de chips.
+- 3 CaSIM de septiembre no se cargaron porque en la planilla el número tiene 9 dígitos (filas 37, 212 y 564 de
+  CAJA3ROSARIO2609): cargarlas a mano con el número bien.
 
 
 PENDIENTES (por importancia)
