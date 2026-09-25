@@ -44,7 +44,8 @@ class Porta(GestionVentaScreen):
     repo = repos.porta
     ref_filters = {"sim_id": "SIM", "plan_id": CATEGORIA_LINEAS}
     form_columns = 2
-    orden_columnas = ("fecha", "nombre", "numero_portar", "plan_id", "vendedor_id", "observaciones")
+    orden_columnas = ("fecha", "nombre", "numero_portar", "plan_id", "id_gestion", "vendedor_id", "fecha_portacion",
+                      "estado", "observaciones")
     sim_default = SIM_FISICA
     number_key = "numero_portar"
     form_new, form_edit = "Nueva gestión Porta", "Editar gestión Porta"

@@ -147,7 +147,8 @@ def _linea(titular=(), linea=()):
 # Regular y Porta: obligatorios solo Fecha y hora, Nombre, el número que identifica la línea (Nuevo número / Número
 # a portar), Plan, Vendedor, Sucursal y Tipo de SIM; el resto se completa después, editando. En la tabla solo se ven
 # Fecha y hora, Nombre, ese número, Plan, Vendedor y Observaciones, con el ancho de Nombre (el doble para Observaciones),
-# más los `visibles` de cada una (Regular: el ID de gestión, después del número), opcionales como el resto.
+# más los `visibles` de cada una (las dos: el ID de gestión, después del plan; Porta, además, la fecha de portación
+# y el estado, antes de Observaciones), opcionales como el resto.
 _ANCHO_LINEA = 140   # el de "Nombre o Razón"
 
 
@@ -161,7 +162,7 @@ def _ajustar_linea(fields, numero_key, ocultos, visibles=()):
         if f.key in ocultos:
             f = replace(f, required=False, in_table=False)
         elif f.key in visibles:
-            f = replace(f, required=False, columna="ID" if f.key == "id_gestion" else "")
+            f = replace(f, required=False, columna="ID" if f.key == "id_gestion" else f.columna)
         if f.key in anchos:
             f = replace(f, width=anchos[f.key])
         return f
@@ -180,8 +181,10 @@ PORTA = _ajustar_linea(_linea(linea=(
     Field("tipo_negocio", "Tipo de negocio actual", kind="list", options=("PREPAGO", "POSPAGO"), width=100),
     Field("nim", "NIM temporal", width=100, digits=10),
     Field("pin", "PIN de portabilidad", width=90),
-    Field("fecha_portacion", "Fecha de portación", kind="date", width=110, in_table=False))),
-    "numero_portar", ocultos=("documento", "compania_donante", "tipo_negocio", "descuento_id", "nim", "pin", "id_gestion"))
+    Field("fecha_portacion", "Fecha de portación", kind="date", width=110, columna="Portación"),
+    Field("estado", "Estado", width=110))),   # texto libre: cómo va la portación
+    "numero_portar", ocultos=("documento", "compania_donante", "tipo_negocio", "descuento_id", "nim", "pin"),
+    visibles=("id_gestion", "fecha_portacion", "estado"))
 
 # BAF (banda ancha fija = fibra óptica): venta e instalación, del titular al estado de la instalación. El
 # formulario se agrupa en tres secciones (gestión, titular, servicio); la tabla (ver BAF.columns en

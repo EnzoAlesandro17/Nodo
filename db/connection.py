@@ -199,6 +199,7 @@ CREATE TABLE IF NOT EXISTS porta (
     nim           TEXT    NOT NULL,              -- NIM temporal
     pin           TEXT    NOT NULL DEFAULT '',   -- PIN ingresado durante la portabilidad
     fecha_portacion TEXT  NOT NULL DEFAULT '',   -- AAAA-MM-DD o vacío
+    estado        TEXT    NOT NULL DEFAULT '',   -- cómo va la portación (texto libre)
     id_gestion    TEXT    NOT NULL,              -- 9 dígitos
     vendedor_id   INTEGER REFERENCES empleados(id),
     sim_id        INTEGER REFERENCES equipos(id),   -- la SIM que se entrega: descuenta stock
@@ -665,12 +666,17 @@ def _m14_subcuentas(conn):
     _sembrar_cuentas_de_cobro(conn)
 
 
+def _m15_porta_estado(conn):
+    if "estado" not in _columnas(conn, "porta"):
+        conn.execute("ALTER TABLE porta ADD COLUMN estado TEXT NOT NULL DEFAULT ''")
+
+
 MIGRACIONES = [_m1_bases_anteriores_al_control_de_version, _m2_pagos_de_ventas_dadas_de_baja,
                _m3_ventas_con_varios_productos_e_intereses, _m4_regular_y_porta_descuentan_sim,
                _m5_empleados_mail_y_nacimiento, _m6_porta_fecha_portacion, _m7_chips_a_equipos,
                _m8_gastos_rubro, _m9_pagos_con_cuenta_obligatoria, _m10_sucursales_por_area,
                _m11_sucursales_direccion_y_telefono, _m12_planes_unificados_con_categoria,
-               _m13_sin_dias_cerrados, _m14_subcuentas]
+               _m13_sin_dias_cerrados, _m14_subcuentas, _m15_porta_estado]
 
 
 def _migrar(conn):
