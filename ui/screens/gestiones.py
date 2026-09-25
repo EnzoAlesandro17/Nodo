@@ -1,6 +1,9 @@
 """Pantallas del menú Nuevo > Gestiones."""
 import re
+import webbrowser
+from tkinter import messagebox, simpledialog, ttk
 
+from db import formulario_baf
 from db import gestiones as repos
 from models import CATEGORIA_BAF, CATEGORIA_LINEAS
 from ui import theme
@@ -77,6 +80,58 @@ class BAF(GestionScreen):
 
     def row_tags(self, row):
         return ({"Instalada": "instalada", "Cancelada": "cancelada"}.get(row["estado"], "en_curso"),)
+
+    # --- formulario de Google (ver db/formulario_baf.py) ---------------
+    def extra_actions(self, bar):
+        self.btn_form = ttk.Button(bar, text="Cargar en el formulario", command=self.cargar_formulario)
+        self.btn_form.pack(side="left", padx=(16, 0))
+        ttk.Button(bar, text="Link del formulario", command=self.pedir_link).pack(side="left", padx=(8, 0))
+
+    def _update_buttons(self):
+        super()._update_buttons()
+        if hasattr(self, "btn_form"):
+            self.btn_form.config(state=self.btn_edit.cget("state"))
+
+    def pedir_link(self):
+        """Pide el link del formulario (cambia cada mes). Devuelve el link, o "" si se canceló."""
+        link = simpledialog.askstring("Link del formulario",
+                                      "Pegá el link del formulario de Google de las BAF (el de este mes):",
+                                      initialvalue=formulario_baf.link_guardado(), parent=self.winfo_toplevel())
+        if link and link.strip():
+            formulario_baf.guardar_link(link)
+            return link.strip()
+        return ""
+
+    def cargar_formulario(self):
+        """Abre el formulario en el navegador con los datos de la gestión elegida, para revisarlo y enviarlo."""
+        row_id = self._selected_id()
+        if row_id is None:
+            return
+        row, parent = self.rows[row_id], self.winfo_toplevel()
+        link = formulario_baf.link_guardado() or self.pedir_link()
+        if not link:
+            return
+        parent.config(cursor="watch")
+        parent.update_idletasks()
+        try:
+            url, avisos = formulario_baf.link_precargado(link, formulario_baf.preguntas(link), row)
+        except formulario_baf.FormularioError as e:
+            messagebox.showerror("Formulario", str(e), parent=parent)
+            return
+        finally:
+            parent.config(cursor="")
+        webbrowser.open(url)
+        aviso = ("Se abrió el formulario con los datos precargados. Revisalo, completá lo que falte y envialo.\n\n"
+                 "Quedan para completar a mano: Estado, Acometimientos y las de portabilidad. Y tildá "
+                 "«Enviarme una copia de mis respuestas».")
+        for texto in avisos:
+            aviso += "\n\n" + texto
+        if row["con_form"]:
+            messagebox.showinfo("Formulario", aviso + "\n\nEsta gestión ya estaba marcada como cargada.", parent=parent)
+        elif messagebox.askyesno("Formulario", aviso + "\n\nCuando lo envíes: ¿la marco como cargada en el formulario?",
+                                 parent=parent):
+            self.repo.update_fields(row_id, {"con_form": 1})
+            self.reload(select=row_id)
 
     def _validate(self, data):
         estado = data["estado"]

@@ -92,6 +92,13 @@ class Repo:
         with self._db:
             self._update_row(row_id, data)
 
+    def update_fields(self, row_id, changes):
+        """Cambia solo algunos campos `{campo: valor}` de un registro."""
+        assert set(changes) <= set(self.keys)
+        sets = ", ".join(f"{k} = ?" for k in changes)
+        with self._db:
+            self._db.execute(f"UPDATE {self.table} SET {sets} WHERE id = ?", list(changes.values()) + [row_id])
+
     def deactivate(self, row_id):
         with self._db:
             self._deactivate_row(row_id)

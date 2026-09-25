@@ -43,6 +43,7 @@ db/                  acceso a datos, sin nada de interfaz
   ventas.py          venta de accesorios con varios productos y pagos combinados
   caja.py            la Caja: se arma leyendo las demás tablas, no guarda nada
   importer.py        CSV del menú Data
+  formulario_baf.py  link precargado del formulario de Google de las BAF (se revisa y se envía a mano)
 ui/                  interfaz Tkinter, sin SQL
   screens/           una pantalla por archivo
   table_base.py, gestion_base.py, form_dialog.py   tabla + formulario genéricos
