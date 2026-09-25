@@ -10,6 +10,7 @@ from tkinter import ttk
 from ui.autocomplete import Combobox
 from ui.formatting import fmt_date, parse_date
 
+ANCHO_CAMPO = 112   # px: Año, Mes, Desde y Hasta miden lo mismo (por caracteres no dan igual: la lista suma la flecha)
 MESES = ("Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre",
          "Noviembre", "Diciembre")
 TODOS = "TODOS"
@@ -40,21 +41,28 @@ class PeriodFilter:
         self.desde, self.hasta = tk.StringVar(), tk.StringVar()
 
         self.frame = ttk.Frame(parent, style="Inner.TFrame")
-        ttk.Label(self.frame, text="Año", style="Card.TLabel").pack(side="left")
-        box = Combobox(self.frame, textvariable=self.anio, values=[TODOS] + list(self.años), state="readonly", width=7)
-        box.pack(side="left", padx=(6, 10))
+        box = Combobox(self._campo("Año", 10), textvariable=self.anio, values=[TODOS] + list(self.años),
+                       state="readonly", width=1)
+        box.grid(sticky="ew")
         box.bind("<<ComboboxSelected>>", lambda e: self._elegir_anio())
-        ttk.Label(self.frame, text="Mes", style="Card.TLabel").pack(side="left")
-        box = Combobox(self.frame, textvariable=self.mes, values=[TODOS] + list(MESES), state="readonly", width=10)
-        box.pack(side="left", padx=(6, 14))
+        box = Combobox(self._campo("Mes", 14), textvariable=self.mes, values=[TODOS] + list(MESES), state="readonly",
+                       width=1)
+        box.grid(sticky="ew")
         box.bind("<<ComboboxSelected>>", lambda e: self._elegir_mes())
         for texto, var, pad in (("Desde", self.desde, 8), ("Hasta", self.hasta, 0)):
-            ttk.Label(self.frame, text=texto, style="Card.TLabel").pack(side="left")
-            e = ttk.Entry(self.frame, textvariable=var, width=10)
-            e.pack(side="left", padx=(6, pad))
+            e = ttk.Entry(self._campo(texto, pad), textvariable=var, width=1)
+            e.grid(sticky="ew")
             e.bind("<Return>", lambda ev: self._rango_a_mano())
             e.bind("<FocusOut>", lambda ev: self._rango_a_mano())
         self.reset()
+
+    def _campo(self, texto, pad):
+        """Etiqueta y el marco de ANCHO_CAMPO px donde va la lista o el campo (que se estira a ese ancho)."""
+        ttk.Label(self.frame, text=texto, style="Card.TLabel").pack(side="left")
+        marco = ttk.Frame(self.frame, style="Inner.TFrame")
+        marco.columnconfigure(0, minsize=ANCHO_CAMPO)
+        marco.pack(side="left", padx=(6, pad))
+        return marco
 
     # --- cambios -----------------------------------------------------------
     def _elegir_anio(self):

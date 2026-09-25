@@ -47,6 +47,8 @@ NUMERIC_KINDS = ("money", "int")
 # Anchos de columna en múltiplos de COL (3 COL entra "Nombre clave", una fecha o un teléfono; 5 COL, un mail). Lo
 # usan Áreas, Sucursales, Empleados y BAF. La última columna de cada tabla absorbe el espacio sobrante de la ventana.
 COL = 40
+ANCHO_VENDEDOR = 4 * COL    # entra «APELLIDO, NOMBRE»
+ANCHO_SUCURSAL = 6 * COL    # entra «CÓDIGO - NOMBRE» de la sucursal
 
 ACCESORIOS = (
     Field("codigo", "Código", required=True, width=110),
@@ -105,8 +107,8 @@ CASIM = (
     Field("sim_id", "Tipo de SIM", kind="select", required=True, width=160, ref="equipos"),
     Field("monto", "Monto", kind="money", width=90),
     Field("cuenta_id", "Cuenta", kind="select", width=100, ref="cuentas"),
-    Field("vendedor_id", "Vendedor", kind="select", width=100, ref="empleados"),
-    Field("sucursal_id", "Sucursal", kind="select", required=True, width=100, ref="sucursales"),
+    Field("vendedor_id", "Vendedor", kind="select", width=ANCHO_VENDEDOR, ref="empleados"),
+    Field("sucursal_id", "Sucursal", kind="select", required=True, width=ANCHO_SUCURSAL, ref="sucursales"),
     Field("observaciones", "Observaciones", width=150, stretch=True),
 )
 
@@ -127,8 +129,8 @@ def _linea(titular=(), linea=()):
     return (
         *en(SECCION_GESTION, (
             Field("fecha", "Fecha y hora", kind="datetime", required=True, width=125),
-            Field("vendedor_id", "Vendedor", kind="select", width=100, ref="empleados"),
-            Field("sucursal_id", "Sucursal", kind="select", required=True, width=100, ref="sucursales", in_table=False),
+            Field("vendedor_id", "Vendedor", kind="select", width=ANCHO_VENDEDOR, ref="empleados"),
+            Field("sucursal_id", "Sucursal", kind="select", required=True, width=ANCHO_SUCURSAL, ref="sucursales", in_table=False),
             Field("sim_id", "Tipo de SIM", kind="select", required=True, width=140, ref="equipos", in_table=False),
             Field("plan_id", "Plan", kind="select", required=True, width=110, ref="planes"),
             Field("descuento_id", "Descuento", kind="select", width=110, ref="descuentos"),
@@ -150,7 +152,7 @@ _ANCHO_LINEA = 140   # el de "Nombre o Razón"
 
 
 def _ajustar_linea(fields, numero_key, ocultos, visibles=()):
-    anchos = {"fecha": _ANCHO_LINEA, numero_key: _ANCHO_LINEA, "plan_id": _ANCHO_LINEA, "vendedor_id": _ANCHO_LINEA,
+    anchos = {"fecha": _ANCHO_LINEA, numero_key: _ANCHO_LINEA, "plan_id": _ANCHO_LINEA, "vendedor_id": ANCHO_VENDEDOR,
              "observaciones": _ANCHO_LINEA * 2}
 
     def ajustar(f):
@@ -190,7 +192,7 @@ TIPOS_DOMICILIO = ("Casa", "Edificio", "Pasillo", "Empresa")
 BAF = (
     Field("fecha", "Fecha de ingreso", kind="datetime", required=True, width=3 * COL, columna="Ingreso",
           section=SECCION_GESTION),
-    Field("vendedor_id", "Vendedor", kind="select", required=True, width=3 * COL, ref="empleados",
+    Field("vendedor_id", "Vendedor", kind="select", required=True, width=ANCHO_VENDEDOR, ref="empleados",
           section=SECCION_GESTION),
     Field("estado", "Estado", kind="list", options=ESTADOS_BAF, width=3 * COL, section=SECCION_GESTION),
     Field("fecha_pactada", "Fecha pactada", kind="date", width=3 * COL, columna="Pactada", section=SECCION_GESTION),
@@ -231,8 +233,8 @@ CATER = (
     Field("imei", "IMEI", width=130, digits=15),
     Field("monto", "Monto", kind="money", width=90),
     Field("pagos", "Pagos", kind="pagos", ref="cuentas", total="monto", in_table=False),
-    Field("vendedor_id", "Vendedor", kind="select", width=100, ref="empleados"),
-    Field("sucursal_id", "Sucursal", kind="select", required=True, width=100, ref="sucursales"),
+    Field("vendedor_id", "Vendedor", kind="select", width=ANCHO_VENDEDOR, ref="empleados"),
+    Field("sucursal_id", "Sucursal", kind="select", required=True, width=ANCHO_SUCURSAL, ref="sucursales"),
     Field("observaciones", "Observaciones", width=160, stretch=True),
 )
 
@@ -246,8 +248,8 @@ GASTOS = (
     Field("factura", "Factura", width=100),
     Field("monto", "Monto", kind="money", required=True, width=100),
     Field("cuenta_id", "Cuenta", kind="select", required=True, width=110, ref="cuentas"),
-    Field("vendedor_id", "Vendedor", kind="select", width=110, ref="empleados"),
-    Field("sucursal_id", "Sucursal", kind="select", required=True, width=110, ref="sucursales"),
+    Field("vendedor_id", "Vendedor", kind="select", width=ANCHO_VENDEDOR, ref="empleados"),
+    Field("sucursal_id", "Sucursal", kind="select", required=True, width=ANCHO_SUCURSAL, ref="sucursales"),
     Field("observaciones", "Observaciones", width=160, stretch=True),
 )
 
@@ -327,8 +329,8 @@ def _movimientos(producto_ref, imei=False):
         Field("precio", "Precio unitario", kind="money", width=100),
         Field("cliente", "Cliente", default="CONSUMIDOR FINAL", width=120, stretch=True),
         Field("medio", "Medio de cobro", kind="list", options=MEDIOS_COBRO, width=90),
-        Field("vendedor_id", "Vendedor", kind="select", ref="empleados", width=100, stretch=True),
-        Field("sucursal_id", "Sucursal", kind="select", required=True, ref="sucursales", width=100, stretch=True),
+        Field("vendedor_id", "Vendedor", kind="select", ref="empleados", width=ANCHO_VENDEDOR, stretch=True),
+        Field("sucursal_id", "Sucursal", kind="select", required=True, ref="sucursales", width=ANCHO_SUCURSAL, stretch=True),
         Field("cupon", "Nº cupón", in_table=False),
         Field("factura", "Factura", in_table=False),
         Field("observaciones", "Observaciones", in_table=False),
