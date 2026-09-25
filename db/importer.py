@@ -1,6 +1,6 @@
 """Importación y exportación masiva de tablas vía CSV (sección Data).
 
-Reglas (ver HOJA_DE_RUTA.txt):
+Reglas (ver también README.md, Datos entre sucursales):
 - El stock nunca se lee ni se modifica: la columna Stock del archivo se ignora.
 - Cada fila se busca por la clave de la tabla (`repo.clave`: el código; en empleados, el nombre).
 - Clave existente -> se modifica, pero solo si la descripción es similar a la actual (en las

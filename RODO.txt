@@ -1,6 +1,6 @@
 RODO - notas de Enzo sobre Nodo
 ===============================
-(Lo esencial. El detalle de cada decisión y cada carga de datos está en HOJA_DE_RUTA.txt.)
+(Lo esencial. Cómo está hecho y las reglas del negocio: README.md.)
 
 
 QUÉ ES
@@ -22,12 +22,9 @@ USO DIARIO
 
 OJO
 ---
-- La base (data/nodo.db) NO está en git. Cada PC tiene la suya y son distintas:
-    * Casa: septiembre completo (1 al 24/9), las CaTER con sus pagos y las cuentas nuevas. Lo anterior a
-      septiembre se borró el 24/9.
-    * Trabajo: arrancó de cero el 24/9, con parte de septiembre cargada y stock en negativo.
-  Antes de presentar, elegir una sola y copiar el archivo a la otra PC, con la app cerrada. Las dos no se pueden
-  juntar.
+- La base (data/nodo.db) NO está en git, y no tiene que estarlo: tiene datos de clientes.
+- La base buena es la de casa: septiembre completo (1 al 24/9). Lo anterior a septiembre se borró el 24/9.
+  La del trabajo quedó vieja: hay que reemplazarla por la de casa.
 - Nunca poner data/nodo.db directamente en una carpeta de Drive o de OneDrive: si se sincroniza mientras la app
   escribe, se puede corromper. Siempre subir una copia de seguridad.
 - La rama de trabajo es "areas-filtros-inicio". Todavía no está en main.
@@ -44,25 +41,45 @@ CUENTAS (cómo se cobró)
 
 PARA REVISAR AHORA
 ------------------
+- Data > Datos por completar: lo que quedó cargado a medias (gestiones sin ID, DNI o NIM, números mal escritos,
+  CaTER sin el modelo del equipo, accesorios con stock negativo).
 - HG'FILMSM (Hidrogel Filminas Matte) tiene stock -1: seguramente falta cargar una reposición.
-- [cliente] (BAF) aparece en la caja el 23/9 sin estado: quedó Pactada.
-- CaTER: el "efe" de [cliente] y el "Delivery" de [cliente] siguen solo en Observaciones, sin pago cargado.
+- Dos CaTER tienen el pago solo en Observaciones ("efe" sin monto y "Delivery"): completar el pago.
 
 
 PENDIENTES (por importancia)
 ----------------------------
-1. Exportar a la planilla de caja: si el Excel se sigue entregando, Nodo tiene que poder generarlo, o se carga
-   dos veces.
-2. Copia automática a Drive (al cerrar la app y una vez por día, guardando 30 días). Primero definir la cuenta de
-   Google: que sea de la empresa, no la personal.
-3. Cierre del día por cuenta: cuánto efectivo y cuánto por tarjeta debería haber.
-4. Transfer: de plata (entre cuentas o a un banco) y de mercadería (a otra sucursal, con confirmación al recibir).
-5. Conciliación de stock: una pantalla con una columna "Contado" al lado del stock.
+1. Exportar a la planilla de caja: si el Excel se sigue entregando, Nodo tiene que generarlo, o se carga dos veces.
+   El Excel usa un código de plan según la gestión (R2G..R50G en Regular, P2G..P50G en Porta); Nodo lo arma con el
+   plan y la gestión.
+2. Base sincronizada entre casa y trabajo, y copia automática (ver lo que se habló el 24/9: Drive para escritorio).
+   Primero definir la cuenta de Google: que sea de la empresa, no la personal.
+3. Cierre del día por cuenta: cuánto efectivo y cuánto por tarjeta debería haber, por cupón y por venta.
+4. Transfer:
+   a) De plata, entre cuentas o a un banco. En la Caja: salida en el origen y entrada en el destino, sin ser venta
+      ni gasto. Casos del Excel:
+      - Carga Virtual (saldo ORGA): por cada $X en efectivo que se le paga al proveedor se acredita 1,04 X de saldo.
+        En Nodo: sale X de EFE, entra 1,04 X a ORGA y la diferencia es comisión a favor.
+      - Lo cobrado con GETNET QR llega a SANTANDERC con una comisión de ~0,97 %. Las comisiones ya se cargan como
+        gasto (rubro BANCARIOS, cuenta SANTANDERC); falta el transfer. Con las tarjetas debería pasar lo mismo.
+      - Falta decidir si cada terminal dice en qué banco se acredita (GETNET -> SANTANDERC).
+   b) De mercadería, a otra sucursal: descuenta el stock acá y la otra confirma lo que recibió.
+5. Conciliación:
+   a) De stock: una pantalla con una columna "Contado" al lado del stock, que arme los ajustes de una vez.
+   b) De gestiones: marcar una CaSIM, Regular o Porta como cancelada o rechazada (con motivo), distinto de Anular
+      (que devuelve el chip al stock).
 6. Usuarios, permisos y registro de quién hizo qué (se puede tomar el login de AppEmar).
-7. Vista del supervisor: juntar las copias de todas las sucursales.
-8. Novedades desde RRHH (empleados, planes) a través de una carpeta compartida: se aplican solas y avisan.
-9. Detalles: completar las gestiones (ID, DNI, NIM...), asignar su sucursal a 8 vendedores, corregir 5CORRIENTES,
-   intereses en CaTER.
+7. Vista del supervisor: juntar las bases de todas las sucursales.
+8. Novedades desde RRHH (empleados, planes) por una carpeta compartida: se aplican solas y avisan.
+9. Intereses también en CaTER y en las ventas sueltas de Stock > Movimientos (hoy solo en la venta de accesorios).
+10. Si se edita o se da de baja el movimiento que generó una gestión desde Stock > Movimientos, la gestión no se
+    entera (al revés sí funciona). Decidir si se bloquea o se sincroniza.
+11. Movimientos: ¿recordar la sucursal de la PC en lugar de la del último movimiento? ¿Sugerir el precio al elegir
+    el producto? ¿Editar el stock a mano solo con permiso?
+12. Datos: cargar los precios sugeridos de los equipos; completar modelo, ROM, RAM y color de los 11 equipos que
+    solo tienen código; el iPhone 14 128GB negro todavía no tiene código; asignar sucursal a 8 vendedores;
+    corregir 5CORRIENTES (dice CALL, San Nicolás); ver si falta la sucursal ACCESORIOS.
+13. MyTools: Nodo ya tiene los arqueos, BAF y tareas. No tiene Horarios. Decidir si MyTools se deja de usar.
 
 
 PREGUNTAS QUE VA A HACER EL SUPERVISOR
