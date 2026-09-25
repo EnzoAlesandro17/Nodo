@@ -33,7 +33,7 @@ class Regular(GestionVentaScreen):
     repo = repos.regular
     ref_filters = {"sim_id": "SIM", "plan_id": CATEGORIA_LINEAS}   # Plan: solo los de líneas
     form_columns = 2   # formulario en dos columnas, por secciones (ver models._linea)
-    orden_columnas = ("fecha", "nombre", "plan_id", "numero", "id_gestion", "vendedor_id", "observaciones")
+    orden_columnas = ("fecha", "nombre", "numero", "plan_id", "id_gestion", "vendedor_id", "observaciones")
     sim_default = SIM_FISICA
     form_new, form_edit = "Nueva gestión Regular", "Editar gestión Regular"
 
