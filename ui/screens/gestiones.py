@@ -84,6 +84,7 @@ class BAF(GestionScreen):
 
     # --- formulario de Google (ver db/formulario_baf.py) ---------------
     def extra_actions(self, bar):
+        super().extra_actions(bar)
         self.btn_form = ttk.Button(bar, text="Cargar en el formulario", command=self.cargar_formulario)
         self.btn_form.pack(side="left", padx=(16, 0))
         ttk.Button(bar, text="Link del formulario", command=self.pedir_link).pack(side="left", padx=(8, 0))

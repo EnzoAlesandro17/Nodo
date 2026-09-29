@@ -1,9 +1,13 @@
 """Pantalla genérica de gestiones: tabla con alta / edición / baja (CRUD) de trámites."""
-from tkinter import messagebox
+from datetime import date
+from pathlib import Path
+from tkinter import filedialog, messagebox, ttk
 
 from db import refs, stock
 from db.administracion import cuentas
+from ui import gestion_xlsx
 from ui.formatting import fmt_money
+from ui.paths import escritorio
 from ui.table_base import TableScreen
 
 
@@ -41,6 +45,31 @@ class GestionScreen(TableScreen):
 
     def _suggestions(self):
         return {f.key: (f.suggests, refs.prices(f.ref)) for f in self.fields if f.suggests}
+
+    # --- exportar ------------------------------------------------------
+    def extra_actions(self, bar):
+        ttk.Button(bar, text="Exportar Excel", command=self.exportar).pack(side="left", padx=(16, 0))
+
+    def exportar(self):
+        """Las filas que se ven (con el filtro, el período y Buscar), en el orden de la tabla y con todos los datos."""
+        top = self.winfo_toplevel()
+        rows = list(self.rows.values())
+        if not rows:
+            return messagebox.showwarning("Exportar", "No hay gestiones en la tabla.", parent=top)
+        nombre = self.title.split("·")[-1].strip().lower()
+        path = filedialog.asksaveasfilename(
+            parent=top, title="Exportar gestiones: elegí dónde guardarlas", defaultextension=".xlsx",
+            initialdir=escritorio(), initialfile=f"{nombre}_{date.today().isoformat()}.xlsx",
+            filetypes=[("Excel", "*.xlsx")])
+        if not path:
+            return
+        try:
+            gestion_xlsx.generar(path, self, rows)
+        except (OSError, ImportError) as e:
+            return messagebox.showerror("No se pudo exportar", str(e), parent=top)
+        n = len(rows)
+        messagebox.showinfo("Exportar", (f"Se exportó 1 {self.noun}." if n == 1 else f"Se exportaron {n} {self.noun_plural}.") + "\n\n"
+                                        f"{Path(path).name}", parent=top)
 
     def _validate(self, data):
         """Reglas propias de cada gestión, además de las de los campos. Devuelve un error, o None."""
