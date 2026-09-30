@@ -33,10 +33,21 @@ clientes, montos de operaciones ni datos de la base.
     observación; "SE PORTA EL dd/m" también va a fecha_portacion.
   * cater: equipo PENDIENTE (virtual). Las observaciones pasan a pagos: "tc-cti $X" -> CLARO TC-CTI por X;
     financiado -> CLARO FINANCIADO y qr -> CLARO QR, sin monto. El Monto es la suma de los pagos.
-  * gasto/varios "REPOS" -> gasto VARIOS, cuenta EFE, sin vendedor. No se cargan: ORGA, transfer, Transfer QR en 0.
+  * gasto -> gasto en efectivo (cuenta EFE, sin vendedor), rubro según TIPO/MODELO (varios, sueldos, limpieza,
+    servicios); "Consumidor final" + REPOS -> detalle REPOS. No se cargan: ORGA (y sus gastos "Carga Virtual"),
+    transfer, Transfer QR.
+  * propio / sim-car "Transfer SIMs" (Cant = chips que llegan de otra sucursal) -> INGRESO de la USIM, FAC. =
+    remito. Las propio de Movim. "conciliacion" son gestiones rechazadas: no se cargan.
   * BAF con observación INSTALADA -> la BAF existente pasa a Instalada con esa fecha.
-- Hoja CajaAcc: las ventas "Consumidor final" -> movimiento VENTA de accesorios: código de barras (sin distinguir
-  mayúsculas), Cant, INGRESO (precio unitario), MODO -> GETNET + la tarjeta (efe -> EFE), Nº = cupón.
+- La caja se controla contra los reportes de Claro (CaTER, activaciones, legajos): cómo leerlos, qué usuario es de
+  qué vendedor y los scripts, en Escritorio\Reportes\LEEME_CLAUDE.md. Con los reportes, en Nodo quedan el nombre
+  completo, el número, el plan, el vendedor y la hora de Claro; la planilla de caja no se modifica nunca.
+- Hoja CajaAcc: las ventas (DETALLE "Consumidor final", o el nombre del empleado que compra a precio mayorista)
+  -> `db.ventas`: código de barras (sin distinguir mayúsculas), Cant, INGRESO (total de la fila: el unitario es
+  INGRESO / Cant), MODO -> GETNET + la tarjeta (efe -> EFE), Nº = cupón (mismo día, cupón y tarjeta = una venta).
+  Cant es lo que sale: "Reposición Acce" (Cant negativa) -> INGRESO por -Cant con FAC. como factura;
+  "conciliacion" -> CONCILIACION por -Cant.
+- Hoja Accesorio: el catálogo. Inicial es el stock al empezar el mes y Actual = Inicial - la suma de Cant de CajaAcc.
 - La caja no tiene hora: fecha a las 11:00, la apertura del local. Antes de cargar, comparar por (fecha, número) con lo que ya está: la
   planilla corrige números de días anteriores.
 
