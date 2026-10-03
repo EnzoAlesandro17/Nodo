@@ -8,30 +8,29 @@ from ui.screens import (administracion, arqueo, caja, consultas, cuentas, data, 
 
 # Estructura del menú, en orden: primero lo que se usa todos los días (cargar, consultar, caja) y al final lo que
 # se toca de vez en cuando (administrar, con el stock, y data). Cada valor es una lista de opciones.
-# Opción: (etiqueta, clase de pantalla[, tecla]) | (etiqueta, [opciones]) = submenú | None = separador
-# La tecla (F2...) abre esa pantalla desde cualquier lado; F1 abre el Inicio.
+# Opción: (etiqueta, clase de pantalla) | (etiqueta, [opciones]) = submenú | None = separador
 MENU = {
     "Nuevo": [
-        ("Accesorios", venta_accesorios.Accesorios, "F2"),
+        ("Accesorios", venta_accesorios.Accesorios),
         ("Gestiones", [
-            ("CaSIM", gestiones.CaSIM, "F3"),
+            ("CaSIM", gestiones.CaSIM),
             ("CaTER", gestiones.CaTER),
             ("Porta", gestiones.Porta),
             ("Regular", gestiones.Regular),
             ("BAF", gestiones.BAF),
         ]),
         None,
-        ("Gasto", gastos.Gasto, "F4"),
+        ("Gasto", gastos.Gasto),
         ("Transfer", nuevo.Transfer),
         ("Conciliación", nuevo.Conciliacion),
     ],
     "Consultas": [
-        ("Ventas y gestiones", consultas.Consultas, "F6"),
-        ("Estadísticas", estadisticas.Estadisticas, "F7"),
+        ("Ventas y gestiones", consultas.Consultas),
+        ("Estadísticas", estadisticas.Estadisticas),
     ],
     "Caja": [
-        ("Movimientos", caja.Caja, "F5"),
-        ("Arqueo de caja", arqueo.Arqueo, "F8"),
+        ("Movimientos", caja.Caja),
+        ("Arqueo de caja", arqueo.Arqueo),
     ],
     "Administrar": [
         ("Áreas", administracion.Areas),
@@ -57,34 +56,6 @@ MENU = {
     ],
 }
 
-# Botones del Inicio: (rótulo, tecla, pantalla)
-ACCESOS = [
-    ("Venta de accesorios", "F2", venta_accesorios.Accesorios),
-    ("CaSIM", "F3", gestiones.CaSIM),
-    ("Gasto", "F4", gastos.Gasto),
-    ("Caja", "F5", caja.Caja),
-    ("Ventas y gestiones", "F6", consultas.Consultas),
-    ("Estadísticas", "F7", estadisticas.Estadisticas),
-    ("Arqueo de caja", "F8", arqueo.Arqueo),
-    ("Stock de accesorios", "", stock.StockAccesorios),
-    ("Regular", "", gestiones.Regular),
-    ("Porta", "", gestiones.Porta),
-    ("Ingreso de equipos", "", ingreso_equipos.IngresoEquipos),
-    ("CSV y copia de seguridad", "", data.Data),
-]
-
-
-def _atajos(items):
-    """[(tecla, pantalla)] de todas las opciones del menú que tienen tecla."""
-    for item in items:
-        if item is None:
-            continue
-        if isinstance(item[1], list):
-            yield from _atajos(item[1])
-        elif len(item) > 2:
-            yield item[2], item[1]
-
-
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -96,7 +67,6 @@ class App(tk.Tk):
         x = (self.winfo_screenwidth() - w) // 2
         self.geometry(f"{w}x{h}+{x}+0")   # pegada arriba, como las demás ventanas (ui.base.arriba)
         theme.apply(self)
-        self.accesos = ACCESOS   # el Inicio los muestra como botones
 
         self._build_menubar()
         self.content = ttk.Frame(self)
@@ -105,10 +75,6 @@ class App(tk.Tk):
         self.status.pack(fill="x", side="bottom")
 
         self.current = None
-        self.bind_all("<F1>", lambda e: self._show_home())
-        for items in MENU.values():
-            for tecla, pantalla in _atajos(items):
-                self.bind_all(f"<{tecla}>", lambda e, p=pantalla: self.show(p))
         self._show_home()
 
     def _build_menubar(self):
@@ -116,7 +82,7 @@ class App(tk.Tk):
         bar.pack(fill="x")
         tk.Button(bar, text="Nodo", command=self._show_home, bg=theme.BAR, fg=theme.BAR_FG, activebackground=theme.BAR_HOVER,
                   activeforeground=theme.BAR_FG, font=("Segoe UI", 11, "bold"), bd=0, padx=16, pady=8,
-                  cursor="hand2").pack(side="left", padx=(0, 8))   # vuelve al Inicio (F1)
+                  cursor="hand2").pack(side="left", padx=(0, 8))   # vuelve al Inicio
 
         for name, items in MENU.items():
             btn = tk.Menubutton(bar, text=name + "  ▾", bg=theme.BAR, fg=theme.BAR_FG,
@@ -136,8 +102,7 @@ class App(tk.Tk):
             if isinstance(target, list):
                 menu.add_cascade(label=label, menu=self._build_menu(menu, target))
             else:
-                menu.add_command(label=label, command=lambda s=target: self.show(s),
-                                 accelerator=item[2] if len(item) > 2 else "")
+                menu.add_command(label=label, command=lambda s=target: self.show(s))
         return menu
 
     def _clear(self):

@@ -1,5 +1,4 @@
-"""Inicio: fecha y clima, resumen del día, novedades, agenda (instalaciones de BAF y portaciones), avisos y accesos
-directos."""
+"""Inicio: fecha y clima, resumen del día, novedades, agenda (instalaciones de BAF y portaciones) y avisos."""
 from datetime import date
 from tkinter import ttk
 
@@ -24,7 +23,6 @@ class Inicio(Screen):
 
     def build(self, card):
         card.configure(padding=(22, 14))
-        app = self.winfo_toplevel()
         hoy = date.today()
         hoy_iso, mes_iso = hoy.isoformat(), hoy.replace(day=1).isoformat()
         del_dia = caja.movimientos(hoy_iso, hoy_iso)
@@ -102,18 +100,6 @@ class Inicio(Screen):
             ttk.Label(avisos, text=("● " if alerta else "✓ ") + texto, style="Card.TLabel", wraplength=420,
                       foreground=theme.DANGER if alerta else theme.OK).grid(row=n, column=0, sticky="w", pady=1)
             ttk.Button(avisos, text=boton, command=lambda a=accion: self._accion(a)).grid(row=n, column=1, padx=(12, 0), pady=1)
-
-        # --- accesos directos
-        ttk.Separator(card).pack(fill="x", pady=8)
-        ttk.Label(card, text="Accesos directos", style="Card.TLabel", font=theme.FONT_BOLD).pack(anchor="w")
-        grilla = ttk.Frame(card, style="Inner.TFrame")
-        grilla.pack(fill="x", pady=(6, 0))
-        columnas = 6
-        for n, (rotulo, tecla, pantalla) in enumerate(getattr(app, "accesos", [])):
-            grilla.columnconfigure(n % columnas, weight=1, uniform="a")
-            texto = f"{rotulo}   [{tecla}]" if tecla else rotulo
-            ttk.Button(grilla, text=texto, command=lambda p=pantalla: app.show(p)).grid(
-                row=n // columnas, column=n % columnas, sticky="ew", padx=(0, 8), pady=(0, 6))
 
     def _agenda(self, marco, hoy):
         """Instalaciones de BAF y portaciones de los próximos días (y las BAF atrasadas). Doble clic abre la gestión."""

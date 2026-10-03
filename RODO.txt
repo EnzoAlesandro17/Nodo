@@ -16,8 +16,6 @@ USO DIARIO
 - PC nueva:      instalar Python (python.org, tildar "Add to PATH") y correr crear_entorno.bat una vez.
 - Actualizar:    git pull. Al abrir Nodo, la base se actualiza sola a la versión nueva.
 - Respaldo:      Data > Copia de seguridad (se puede con la app abierta). El Inicio avisa si hace más de una semana.
-- Atajos:        F1 Inicio · F2 Venta de accesorios · F3 CaSIM · F4 Gasto · F5 Caja · F6 Ventas y gestiones
-                 F7 Estadísticas · F8 Arqueo
 
 
 OJO

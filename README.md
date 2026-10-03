@@ -33,7 +33,7 @@ correrlos antes de cada cambio.
 ## Estructura
 
 ```
-app.py, main.pyw     ventana principal, menú y atajos (F1 a F8)
+app.py, main.pyw     ventana principal y menú
 models.py            campos de cada tabla (Field): los usan la base, los formularios, las tablas y los CSV
 db/                  acceso a datos, sin nada de interfaz
   connection.py      esquema (SCHEMA), migraciones numeradas (MIGRACIONES) y la conexión
