@@ -48,6 +48,9 @@ PARA REVISAR AHORA
 - 42 accesorios tienen stock negativo desde el stock inicial de la planilla (ya venían así en la hoja Accesorio).
 - Dos CaTER de septiembre no tienen forma de pago en la caja (una dice "Delivery"): completar el pago.
 - Las CaTER tienen el IMEI pero el equipo en PENDIENTE: el modelo que informa Claro está en Observaciones.
+- Las CaTER de octubre están en PENDIENTE y sin IMEI (la caja no lo trae). 4 equipos (un A17 y tres A16)
+  ya no figuran en el STOCKDIARIO del 3/10 pero siguen en el stock de Nodo: son de esas CaTER. Al elegir el
+  modelo y el IMEI en la CaTER (con el reporte CATER de octubre) se descuentan solos.
 - 4 BAF se cargaron desde el reporte de Claro solo con nombre y SDS: completar los datos.
 - La USIM sigue en negativo (-149) aun con las "Transfer SIMs" cargadas: faltan ingresos de chips.
 - 3 CaSIM de septiembre no se cargaron (número de 9 dígitos) y 4 quedaron con un número dudoso (en la caja tienen
